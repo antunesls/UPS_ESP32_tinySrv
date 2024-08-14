@@ -1,0 +1,12 @@
+#Git Ignore
+
+#Other Files
+*.lock
+
+# Workspace
+*.code-workspace
+
+#Folders
+\build
+\.vscode
+\.devcontainer
