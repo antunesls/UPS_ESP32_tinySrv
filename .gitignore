@@ -2,6 +2,7 @@
 
 #Other Files
 *.lock
+sdkconfig.old
 
 # Workspace
 *.code-workspace

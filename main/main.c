@@ -23,8 +23,18 @@ This project is base on the need to monitoring the UPS Ragtech Easy Pro 1200VA (
 // #include "usb/usbh.h"
 #include "usb/cdc_acm_host.h"
 
+// WIFI
+#include <WiFi.h>        // Inclui a biblioteca WiFi para conectar à rede
+#include <HTTPClient.h>  // Inclui a biblioteca HTTPClient para fazer requisições HTTP
+//====
+
 #define EXAMPLE_USB_HOST_PRIORITY (10)
 #define EXAMPLE_TX_TIMEOUT_MS (300)
+
+//=== WIFI======
+const char* ssid = "iot-antunesls-sala";           // Substitua com o nome da sua rede Wi-Fi
+const char* password = "10203099";      // Substitua com a senha da sua rede Wi-Fi
+//==============
 
 static const char *TAG = "USB-CDC";
 static SemaphoreHandle_t device_disconnected_sem;
@@ -114,8 +124,8 @@ static void build_payload(const uint8_t *buffer, char *output_json, size_t outpu
 // Callback para processar dados recebidos e montar o payload
 static bool handle_rx(const uint8_t *data, size_t data_len, void *arg)
 {
-    ESP_LOGI(TAG, "Dados recebidos", ESP_LOG_VERBOSE);
-    ESP_LOGI(TAG, "Tamanho recebidos %u", data_len, ESP_LOG_VERBOSE);
+    ESP_LOGI(TAG, "Dados recebidos");
+    ESP_LOGI(TAG, "Tamanho recebidos %u", data_len);
     ESP_LOG_BUFFER_HEXDUMP(TAG, data, data_len, ESP_LOG_VERBOSE);
 
     if (xBufferIndex + data_len < sizeof(xBuffer))
@@ -123,8 +133,8 @@ static bool handle_rx(const uint8_t *data, size_t data_len, void *arg)
         memcpy(xBuffer + xBufferIndex, data, data_len);
         xBufferIndex += data_len;
 
-        ESP_LOGI(TAG, "Dados buffer %.*s", (int)xBufferIndex, xBuffer, ESP_LOG_VERBOSE);
-        ESP_LOGI(TAG, "Tamanho buffer %u", xBufferIndex, ESP_LOG_VERBOSE);
+        ESP_LOGI(TAG, "Dados buffer %.*s", (int)xBufferIndex, xBuffer);
+        ESP_LOGI(TAG, "Tamanho buffer %u", xBufferIndex);
 
         // Verifica se recebeu dados suficientes
         if (xBufferIndex >= 31)
@@ -137,7 +147,7 @@ static bool handle_rx(const uint8_t *data, size_t data_len, void *arg)
     }
     else
     {
-        ESP_LOGE(TAG, "Buffer overflow", ESP_LOG_VERBOSE);
+        ESP_LOGE(TAG, "Buffer overflow");
         xBufferIndex = 0; // Reset buffer to avoid undefined behavior
     }
 
@@ -159,7 +169,7 @@ static void handle_newdev(usb_device_handle_t usb_dev)
     dev_desc = (usb_device_desc_t *)malloc(sizeof(usb_device_desc_t));
     if (dev_desc == NULL)
     {
-        ESP_LOGE(TAG, "Falha ao alocar memória para o descritor do dispositivo", ESP_LOG_VERBOSE);
+        ESP_LOGE(TAG, "Falha ao alocar memória para o descritor do dispositivo");
         return;
     }
 
@@ -173,7 +183,7 @@ static void handle_newdev(usb_device_handle_t usb_dev)
         return;
     }
 
-    ESP_LOGI(TAG, "Dispositivo conectado: VID=0x%04X, PID=0x%04X", dev_desc->idVendor, dev_desc->idProduct, ESP_LOG_VERBOSE);
+    ESP_LOGI(TAG, "Dispositivo conectado: VID=0x%04X, PID=0x%04X", dev_desc->idVendor, dev_desc->idProduct);
 
     lConected = true;
 }
@@ -223,6 +233,17 @@ static void usb_lib_task(void *arg)
     }
 }
 
+//=======SETUP - PREPARACAO WIFI================
+void setup() {
+  Serial.begin(115200);                  // Inicia a comunicação serial
+  WiFi.begin(ssid, password);            // Conecta à rede Wi-Fi
+  while (WiFi.status() != WL_CONNECTED) { // Espera até que a conexão seja estabelecida
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("WiFi conectado.");
+}
+
 // Aplicação principal
 void app_main(void)
 {
@@ -230,7 +251,7 @@ void app_main(void)
     assert(device_disconnected_sem);
 
     // Instala o driver USB Host
-    ESP_LOGI(TAG, "Instalando USB Host", ESP_LOG_VERBOSE);
+    ESP_LOGI(TAG, "Instalando USB Host");
     const usb_host_config_t host_config = {
         .skip_phy_setup = false,
         .intr_flags = ESP_INTR_FLAG_LEVEL1,
@@ -242,7 +263,7 @@ void app_main(void)
     BaseType_t task_created = xTaskCreate(usb_lib_task, "usb_lib", 4096, xTaskGetCurrentTaskHandle(), EXAMPLE_USB_HOST_PRIORITY, NULL);
     assert(task_created == pdTRUE);
 
-    ESP_LOGI(TAG, "Instalando driver CDC-ACM", ESP_LOG_VERBOSE);
+    ESP_LOGI(TAG, "Instalando driver CDC-ACM");
 
     static const cdc_acm_host_driver_config_t cdc_acm_driver_config_default = {
         .driver_task_stack_size = 4096,
@@ -276,7 +297,7 @@ void app_main(void)
         esp_err_t err = cdc_acm_host_open(dev_desc->idVendor, dev_desc->idProduct, 0, &dev_config, &cdc_dev);
         if (ESP_OK != err)
         {
-            ESP_LOGI(TAG, "Falha ao abrir dispositivo", ESP_LOG_VERBOSE);
+            ESP_LOGI(TAG, "Falha ao abrir dispositivo");
             vTaskDelay(pdMS_TO_TICKS(10000));
             continue;
         }
