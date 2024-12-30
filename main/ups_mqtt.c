@@ -17,51 +17,51 @@ void publish_metrics(const ups_metricts_t *metrics) {
     char topic[64];
     char payload[32];
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/power_out_percent");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/power_out_percent");
     snprintf(payload, sizeof(payload), "%.2f", metrics->power_out_percent);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/current_out");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/current_out");
     snprintf(payload, sizeof(payload), "%.2f", metrics->current_out);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/voltage_out");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/voltage_out");
     snprintf(payload, sizeof(payload), "%.2f", metrics->voltage_out);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/voltage_in");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/voltage_in");
     snprintf(payload, sizeof(payload), "%.2f", metrics->voltage_in);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/power_out");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/power_out");
     snprintf(payload, sizeof(payload), "%.2f", metrics->power_out);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/power_in");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/power_in");
     snprintf(payload, sizeof(payload), "%.2f", metrics->power_in);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/energy_out");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/energy_out");
     snprintf(payload, sizeof(payload), "%.2f", metrics->energy_out);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/energy_in");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/energy_in");
     snprintf(payload, sizeof(payload), "%.2f", metrics->energy_in);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/temperature");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/temperature");
     snprintf(payload, sizeof(payload), "%.2f", metrics->temperature);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/battery_state");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/battery_state");
     snprintf(payload, sizeof(payload), "%.2f", metrics->battery_state);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/battery_voltage");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/battery_voltage");
     snprintf(payload, sizeof(payload), "%.2f", metrics->battery_voltage);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 
-    snprintf(topic, sizeof(topic), "/ups_esp32_srv/metrics/frequency");
+    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/frequency");
     snprintf(payload, sizeof(payload), "%.2f", metrics->frequency);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
 }
@@ -102,8 +102,8 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
 void mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        //.broker.address.uri = "mqtt://antunesls:wCdEv_u7XKo-yip-34vH@10.100.100.60",
-        .broker.address.uri = "mqtt://test.mosquitto.org",
+        .broker.address.uri = "mqtt://antunesls:wCdEv_u7XKo-yip-34vH@10.100.100.60",
+        //.broker.address.uri = "mqtt://test.mosquitto.org",
     };
 
     client = esp_mqtt_client_init(&mqtt_cfg);
