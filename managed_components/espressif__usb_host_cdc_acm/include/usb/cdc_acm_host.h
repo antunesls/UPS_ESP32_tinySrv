@@ -8,43 +8,18 @@
 
 #include <stdbool.h>
 #include "usb/usb_host.h"
-#include "usb_types_cdc.h"
+#include "usb/usb_types_cdc.h"
 #include "esp_err.h"
+
+// Pass these to cdc_acm_host_open() to signal that you don't care about VID/PID of the opened device
+#define CDC_HOST_ANY_VID (0)
+#define CDC_HOST_ANY_PID (0)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef struct cdc_dev_s *cdc_acm_dev_hdl_t;
-
-/**
- * @brief Line Coding structure
- * @see Table 17, USB CDC-PSTN specification rev. 1.2
- */
-typedef struct {
-    uint32_t dwDTERate;  // in bits per second
-    uint8_t bCharFormat; // 0: 1 stopbit, 1: 1.5 stopbits, 2: 2 stopbits
-    uint8_t bParityType; // 0: None, 1: Odd, 2: Even, 3: Mark, 4: Space
-    uint8_t bDataBits;   // 5, 6, 7, 8 or 16
-} __attribute__((packed)) cdc_acm_line_coding_t;
-
-/**
- * @brief UART State Bitmap
- * @see Table 31, USB CDC-PSTN specification rev. 1.2
- */
-typedef union {
-    struct {
-        uint16_t bRxCarrier : 1;  // State of receiver carrier detection mechanism of device. This signal corresponds to V.24 signal 109 and RS-232 signal DCD.
-        uint16_t bTxCarrier : 1;  // State of transmission carrier. This signal corresponds to V.24 signal 106 and RS-232 signal DSR.
-        uint16_t bBreak : 1;      // State of break detection mechanism of the device.
-        uint16_t bRingSignal : 1; // State of ring signal detection of the device.
-        uint16_t bFraming : 1;    // A framing error has occurred.
-        uint16_t bParity : 1;     // A parity error has occurred.
-        uint16_t bOverRun : 1;    // Received data has been discarded due to overrun in the device.
-        uint16_t reserved : 9;
-    };
-    uint16_t val;
-} cdc_acm_uart_state_t;
 
 /**
  * @brief CDC-ACM Device Event types to upper layer
@@ -131,7 +106,10 @@ typedef struct {
  * - This function should be called before calling any other CDC driver functions
  *
  * @param[in] driver_config Driver configuration structure. If set to NULL, a default configuration will be used.
- * @return esp_err_t
+ * @return
+ *   - ESP_OK: Success
+ *   - ESP_ERR_INVALID_STATE: The CDC driver is already installed or USB host library is not installed
+ *   - ESP_ERR_NO_MEM: Not enough memory for installing the driver
  */
 esp_err_t cdc_acm_host_install(const cdc_acm_host_driver_config_t *driver_config);
 
@@ -140,7 +118,10 @@ esp_err_t cdc_acm_host_install(const cdc_acm_host_driver_config_t *driver_config
  *
  * - Users must ensure that all CDC devices must be closed via cdc_acm_host_close() before calling this function
  *
- * @return esp_err_t
+ * @return
+ *   - ESP_OK: Success
+ *   - ESP_ERR_INVALID_STATE: The CDC driver is not installed or not all CDC devices are closed
+ *   - ESP_ERR_NOT_FINISHED: The CDC driver failed to uninstall completely
  */
 esp_err_t cdc_acm_host_uninstall(void);
 
@@ -150,39 +131,38 @@ esp_err_t cdc_acm_host_uninstall(void);
  * The callback will be called for every new USB device, not just CDC-ACM class.
  *
  * @param[in] new_dev_cb New device callback function
- * @return esp_err_t
+ * @return
+ *   - ESP_OK: Success
  */
 esp_err_t cdc_acm_host_register_new_dev_callback(cdc_acm_new_dev_callback_t new_dev_cb);
 
 /**
- * @brief Open CDC-ACM compliant device
+ * @brief Open CDC-ACM device
  *
- * CDC-ACM compliant device must contain either an Interface Association Descriptor or CDC-Union descriptor,
- * which are used for the driver's configuration.
+ * The driver first looks for CDC compliant descriptor, if it is not found the driver checks if the interface has 2 Bulk endpoints that can be used for data
  *
- * @param[in] vid           Device's Vendor ID
- * @param[in] pid           Device's Product ID
+ * Use CDC_HOST_ANY_* macros to signal that you don't care about the device's VID and PID. In this case, first USB device will be opened.
+ * It is recommended to use this feature if only one device can ever be in the system (there is no USB HUB connected).
+ *
+ * @param[in] vid           Device's Vendor ID, set to CDC_HOST_ANY_VID for any
+ * @param[in] pid           Device's Product ID, set to CDC_HOST_ANY_PID for any
  * @param[in] interface_idx Index of device's interface used for CDC-ACM communication
  * @param[in] dev_config    Configuration structure of the device
  * @param[out] cdc_hdl_ret  CDC device handle
- * @return esp_err_t
+ * @return
+ *   - ESP_OK: Success
+ *   - ESP_ERR_INVALID_STATE: The CDC driver is not installed
+ *   - ESP_ERR_INVALID_ARG: dev_config or cdc_hdl_ret is NULL
+ *   - ESP_ERR_NO_MEM: Not enough memory for opening the device
+ *   - ESP_ERR_NOT_FOUND: USB device with specified VID/PID is not connected or does not have specified interface
  */
 esp_err_t cdc_acm_host_open(uint16_t vid, uint16_t pid, uint8_t interface_idx, const cdc_acm_host_device_config_t *dev_config, cdc_acm_dev_hdl_t *cdc_hdl_ret);
 
-/**
- * @brief Open CDC-ACM non-compliant device
- *
- * CDC-ACM non-compliant device acts as CDC-ACM device but doesn't support all its features.
- * User must provide the interface index that will be used (zero for non-composite devices).
- *
- * @param[in] vid           Device's Vendor ID
- * @param[in] pid           Device's Product ID
- * @param[in] interface_idx Index of device's interface used for CDC-ACM like communication
- * @param[in] dev_config    Configuration structure of the device
- * @param[out] cdc_hdl_ret  CDC device handle
- * @return esp_err_t
- */
-esp_err_t cdc_acm_host_open_vendor_specific(uint16_t vid, uint16_t pid, uint8_t interface_num, const cdc_acm_host_device_config_t *dev_config, cdc_acm_dev_hdl_t *cdc_hdl_ret);
+// This function is deprecated, please use cdc_acm_host_open()
+static inline esp_err_t cdc_acm_host_open_vendor_specific(uint16_t vid, uint16_t pid, uint8_t interface_num, const cdc_acm_host_device_config_t *dev_config, cdc_acm_dev_hdl_t *cdc_hdl_ret)
+{
+    return cdc_acm_host_open(vid, pid, interface_num, dev_config, cdc_hdl_ret);
+}
 
 /**
  * @brief Close CDC device and release its resources
@@ -268,7 +248,9 @@ void cdc_acm_host_desc_print(cdc_acm_dev_hdl_t cdc_hdl);
  * @param cdc_hdl   CDC handle obtained from cdc_acm_host_open()
  * @param[out] comm Communication protocol
  * @param[out] data Data protocol
- * @return esp_err_t
+ * @return
+ *   - ESP_OK: Success
+ *   - ESP_ERR_INVALID_ARG: Invalid device
  */
 esp_err_t cdc_acm_host_protocols_get(cdc_acm_dev_hdl_t cdc_hdl, cdc_comm_protocol_t *comm, cdc_data_protocol_t *data);
 
@@ -329,7 +311,7 @@ public:
 
     inline esp_err_t open_vendor_specific(uint16_t vid, uint16_t pid, uint8_t interface_idx, const cdc_acm_host_device_config_t *dev_config)
     {
-        return cdc_acm_host_open_vendor_specific(vid, pid, interface_idx, dev_config, &this->cdc_hdl);
+        return cdc_acm_host_open(vid, pid, interface_idx, dev_config, &this->cdc_hdl);
     }
 
     inline esp_err_t close()
