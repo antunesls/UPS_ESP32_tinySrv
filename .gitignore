@@ -11,4 +11,4 @@ sdkconfig.old
 \build
 \.vscode
 \.devcontainer
-\.managed_components
+\managed_components
