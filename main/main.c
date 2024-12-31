@@ -37,6 +37,10 @@ This project is base on the need to monitoring the UPS Ragtech Easy Pro 1200VA (
 
 static const char *TAG = "UPS-Srv";
 
+static void setup()
+{
+}
+
 // Aplicação principal
 void app_main(void)
 {
@@ -50,6 +54,7 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
 
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
 
