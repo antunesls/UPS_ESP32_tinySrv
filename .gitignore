@@ -12,3 +12,6 @@ sdkconfig.old
 \.vscode
 \.devcontainer
 \managed_components
+
+#env
+Kconfig.projbuild

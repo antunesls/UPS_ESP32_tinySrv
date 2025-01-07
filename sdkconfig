@@ -545,7 +545,7 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
-# Example Configuration
+# Configuration UP Srv Lucas
 #
 CONFIG_ESP_WIFI_SSID="iot-antunesls-sala"
 CONFIG_ESP_WIFI_PASSWORD="10203099"
@@ -562,8 +562,8 @@ CONFIG_ESP_WIFI_AUTH_WPA2_PSK=y
 # CONFIG_ESP_WIFI_AUTH_WPA3_PSK is not set
 # CONFIG_ESP_WIFI_AUTH_WPA2_WPA3_PSK is not set
 # CONFIG_ESP_WIFI_AUTH_WAPI_PSK is not set
-CONFIG_BROKER_URL="mqtt://modin.616.multiverse"
-# end of Example Configuration
+CONFIG_BROKER_URL="mqtt://antunesls:wCdEv_u7XKo-yip-34vH@10.100.100.60"
+# end of Configuration UP Srv Lucas
 
 #
 # Compiler options

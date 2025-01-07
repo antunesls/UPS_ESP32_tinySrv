@@ -9,13 +9,15 @@
 #include "ups.h"
 #include "esp_system.h"
 
-#define MAX_IDENTIFIERS 10
-#define MAX_STRING_LENGTH 256
-#define MAX_AVAILABILITY 10
+#define MAX_IDENTIFIERS 1
+#define MAX_STRING_LENGTH 64
+#define MAX_AVAILABILITY 1
+
+#define URI_BROKER CONFIG_BROKER_URL
 
 // Define topic to setup mqtt discovery
 
-#define TOPIC_SETUP "homeassistant/sensor/0x"
+#define TOPIC_SETUP "homeassistant/sensor/"
 #define TOPIC_CONFIG "config"
 
 // Define a struct for type and unit
@@ -39,26 +41,26 @@ typedef struct
 #define TYPE_FREQUENCY "frequency"
 
 // Fixed values from the JSON MQTT Setup
-#define TOPIC_0 "zigbee2mqtt/bridge/state"
+#define TOPIC_0 "UPS_ESP32_tinySrv/%s/state"
 #define VALUE_TEMPLATE_0 "{{ value_json.state }}"
-#define TOPIC_1 "zigbee2mqtt/Sensor_Termometro_Banheiro/availability"
-#define VALUE_TEMPLATE_1 "{{ value_json.state }}"
+//#define TOPIC_1 "UPS_ESP32_tinySrv/Sensor_Termometro_Banheiro/availability"
+//#define VALUE_TEMPLATE_1 "{{ value_json.state }}"
 #define AVAILABILITY_MODE "all"
-#define IDENTIFIER_0 "zigbee2mqtt_0xa4c138be5fc1e488"
-#define MANUFACTURER "Tuya"
-#define MODEL "Temperature & humidity sensor (WSD500A)"
-#define NAME "Sensor_Termometro_Banheiro"
-#define VIA_DEVICE "zigbee2mqtt_bridge_0x00124b002b486c01"
-#define DEVICE_CLASS "temperature"
-#define OBJECT_ID "sensor_termometro_banheiro_temperature"
-#define ORIGIN_NAME "Zigbee2MQTT"
-#define ORIGIN_SW "1.42.0"
-#define ORIGIN_URL "https://www.zigbee2mqtt.io"
+#define IDENTIFIER_0 "UPS_ESP32_tinySrv_%s"
+#define MANUFACTURER "Lucas Souza"
+#define MODEL "UPS_ESP32_tinySrv"
+#define NAME "UPS_ESP32_tinySrv_Sensor_%s"
+#define VIA_DEVICE "UPS_ESP32_tinySrv_bridge_%s"
+#define DEVICE_CLASS "%s"
+#define OBJECT_ID "sensor_ups_%s"
+#define ORIGIN_NAME "UPS_ESP32_tinySrv"
+#define ORIGIN_SW "1.0.0"
+#define ORIGIN_URL "https://github.com/antunesls/UPS_ESP32_tinySrv"
 #define STATE_CLASS "measurement"
-#define STATE_TOPIC "zigbee2mqtt/Sensor_Termometro_Banheiro"
-#define UNIQUE_ID "0xa4c138be5fc1e488_temperature_zigbee2mqtt"
-#define UNIT_OF_MEASUREMENT "\u00b0C"
-#define VALUE_TEMPLATE "{{ value_json.temperature }}"
+#define STATE_TOPIC "UPS_ESP32_tinySrv/Sensor_%s"
+#define UNIQUE_ID "%s_%s_UPS_ESP32_tinySrv"
+#define UNIT_OF_MEASUREMENT "%s"
+#define VALUE_TEMPLATE "{{ value_json.%s }}"
 
 typedef struct
 {
@@ -69,7 +71,7 @@ typedef struct
 typedef struct
 {
     char identifiers[MAX_IDENTIFIERS][MAX_STRING_LENGTH];
-    char manufacturer[MAX_STRING_LENGTH];
+    char manufacturer[12];
     char model[MAX_STRING_LENGTH];
     char name[MAX_STRING_LENGTH];
     char via_device[MAX_STRING_LENGTH];
@@ -86,7 +88,7 @@ typedef struct
 {
     Availability availability[MAX_AVAILABILITY];
     int availability_count; // Number of availability entries
-    char availability_mode[MAX_STRING_LENGTH];
+    char availability_mode[3];
     Device device;
     char device_class[MAX_STRING_LENGTH];
     bool enabled_by_default;

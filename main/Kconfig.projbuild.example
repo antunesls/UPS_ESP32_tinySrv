@@ -1,14 +1,14 @@
-menu "Configuration UP Srv Lucas"
+menu "Configuration UP Srv Example"
 
     config ESP_WIFI_SSID
         string "WiFi SSID"
-        default "iot-antunesls-sala"
+        default "SSID_AP_WIFI"
         help
             SSID (network name) for the example to connect to.
 
     config ESP_WIFI_PASSWORD
         string "WiFi Password"
-        default "10203099"
+        default "password"
         help
             WiFi password (WPA or WPA2) for the example to use.
 
@@ -66,7 +66,7 @@ menu "Configuration UP Srv Lucas"
 
     config BROKER_URL
         string "Broker URL"
-        default "mqtt://antunesls:wCdEv_u7XKo-yip-34vH@10.100.100.60"
+        default "mqtt://address_mqtt"
         help
             URL of the broker to connect to
 
