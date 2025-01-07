@@ -14,4 +14,4 @@ sdkconfig.old
 \managed_components
 
 #env
-Kconfig.projbuild
+main\Kconfig.projbuild
