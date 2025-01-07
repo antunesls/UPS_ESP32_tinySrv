@@ -74,5 +74,4 @@ menu "Configuration UP Srv Lucas"
         bool
         default y if BROKER_URL = "FROM_STDIN"
 
-
 endmenu
