@@ -16,7 +16,8 @@ void publish_metrics(const ups_metricts_t *metrics)
     }
 
     // Publicar cada métrica em seu próprio tópico
-    char topic[64];
+    char topic[128];
+    char topicbase[64];
     char payload[32];
 
     uint8_t mac[6];
@@ -25,55 +26,56 @@ void publish_metrics(const ups_metricts_t *metrics)
     snprintf(macAddr, sizeof(macAddr),
              "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/%s/availability", macAddr);
-    //    snprintf(payload, sizeof(payload), "%.2f", metrics->power_out_percent);
+    snprintf(topicbase, sizeof(topicbase), "UPS_ESP32_tinySrv/%s", macAddr);
+
+    snprintf(topic, sizeof(topic), "%s/availability", topicbase);
     esp_mqtt_client_publish(client, topic, "{\"state\":\"online\"}", 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_power_out_percent");
+    snprintf(topic, sizeof(topic), "%s/Sensor_power_out_percent", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->power_out_percent);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_current_out");
+    snprintf(topic, sizeof(topic), "%s/Sensor_current_out", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->current_out);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_voltage_out");
+    snprintf(topic, sizeof(topic), "%s/Sensor_voltage_out", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->voltage_out);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_voltage_in");
+    snprintf(topic, sizeof(topic), "%s/Sensor_voltage_in", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->voltage_in);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_power_out");
+    snprintf(topic, sizeof(topic), "%s/Sensor_power_out", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->power_out);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_power_in");
+    snprintf(topic, sizeof(topic), "%s/Sensor_power_in", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->power_in);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_energy_out");
+    snprintf(topic, sizeof(topic), "%s/Sensor_energy_out", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->energy_out);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_energy_in");
+    snprintf(topic, sizeof(topic), "%s/Sensor_energy_in", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->energy_in);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_temperature");
+    snprintf(topic, sizeof(topic), "%s/Sensor_temperature", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->temperature);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_battery_state");
+    snprintf(topic, sizeof(topic), "%s/Sensor_battery_state", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->battery_state);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_battery_voltage");
+    snprintf(topic, sizeof(topic), "%s/Sensor_battery_voltage", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->battery_voltage);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_frequency");
+    snprintf(topic, sizeof(topic), "%s/Sensor_frequency", topicbase);
     snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->frequency);
     esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 }
@@ -211,7 +213,7 @@ void SensorSetup(SensorData *sensor, TypeInfo *type_sensor, char *macaddress)
     strcpy(sensor->state_class, STATE_CLASS);
 
     // Set state_topic
-    snprintf(aux, sizeof(aux), STATE_TOPIC, type_sensor->type);
+    snprintf(aux, sizeof(aux), STATE_TOPIC, macaddress, type_sensor->type);
     strcpy(sensor->state_topic, aux);
 
     // Set unique_id

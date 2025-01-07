@@ -81,7 +81,7 @@ typedef struct
 #define ORIGIN_SW "1.0.0"
 #define ORIGIN_URL "https://github.com/antunesls/UPS_ESP32_tinySrv"
 #define STATE_CLASS "measurement"
-#define STATE_TOPIC "UPS_ESP32_tinySrv/Sensor_%s"
+#define STATE_TOPIC "UPS_ESP32_tinySrv/%s/Sensor_%s"
 #define UNIQUE_ID "%s_%s_UPS_ESP32_tinySrv"
 #define UNIT_OF_MEASUREMENT "%s"
 #define VALUE_TEMPLATE "{{ value_json.%s }}"
