@@ -25,6 +25,9 @@ typedef struct
 {
     char *type;
     char *unit;
+    char *device;
+    char *name;
+
 } TypeInfo;
 
 // Category os UPS
@@ -40,11 +43,32 @@ typedef struct
 #define TYPE_BATTERY_VOLTAGE "battery_voltage"
 #define TYPE_FREQUENCY "frequency"
 
+#define DEVICE_POWER_OUT_PERCENT "power"
+#define DEVICE_CURRENT_OUT "current"
+#define DEVICE_VOLTAGE_OUT "voltage"
+#define DEVICE_VOLTAGE_IN "voltage"
+#define DEVICE_POWER_OUT "power"
+#define DEVICE_POWER_IN "power"
+#define DEVICE_TEMPERATURE "temperature"
+#define DEVICE_BATTERY_STATE "battery"
+#define DEVICE_BATTERY_VOLTAGE "voltage"
+#define DEVICE_FREQUENCY "frequency"
+
+#define NAME_POWER_OUT_PERCENT "Power Out %"
+#define NAME_CURRENT_OUT "Current Out"
+#define NAME_VOLTAGE_OUT "Voltage Out"
+#define NAME_VOLTAGE_IN "Voltage In"
+#define NAME_POWER_OUT "Power Out"
+#define NAME_POWER_IN "Power IN"
+#define NAME_TEMPERATURE "Temperatura"
+#define NAME_BATTERY_STATE "Battery State"
+#define NAME_BATTERY_VOLTAGE "Battery Voltage"
+#define NAME_FREQUENCY "Frequency"
+
+
 // Fixed values from the JSON MQTT Setup
-#define TOPIC_0 "UPS_ESP32_tinySrv/%s/state"
+#define TOPIC_0 "UPS_ESP32_tinySrv/%s/availability"
 #define VALUE_TEMPLATE_0 "{{ value_json.state }}"
-//#define TOPIC_1 "UPS_ESP32_tinySrv/Sensor_Termometro_Banheiro/availability"
-//#define VALUE_TEMPLATE_1 "{{ value_json.state }}"
 #define AVAILABILITY_MODE "all"
 #define IDENTIFIER_0 "UPS_ESP32_tinySrv_%s"
 #define MANUFACTURER "Lucas Souza"
@@ -71,7 +95,7 @@ typedef struct
 typedef struct
 {
     char identifiers[MAX_IDENTIFIERS][MAX_STRING_LENGTH];
-    char manufacturer[12];
+    char manufacturer[MAX_STRING_LENGTH];
     char model[MAX_STRING_LENGTH];
     char name[MAX_STRING_LENGTH];
     char via_device[MAX_STRING_LENGTH];
@@ -88,12 +112,13 @@ typedef struct
 {
     Availability availability[MAX_AVAILABILITY];
     int availability_count; // Number of availability entries
-    char availability_mode[3];
+    char availability_mode[MAX_STRING_LENGTH];
     Device device;
     char device_class[MAX_STRING_LENGTH];
     bool enabled_by_default;
     char object_id[MAX_STRING_LENGTH];
     Origin origin;
+    char name[MAX_STRING_LENGTH];
     char state_class[MAX_STRING_LENGTH];
     char state_topic[MAX_STRING_LENGTH];
     char unique_id[MAX_STRING_LENGTH];

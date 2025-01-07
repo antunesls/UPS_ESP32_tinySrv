@@ -19,53 +19,63 @@ void publish_metrics(const ups_metricts_t *metrics)
     char topic[64];
     char payload[32];
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/power_out_percent");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->power_out_percent);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    uint8_t mac[6];
+    char macAddr[13];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    snprintf(macAddr, sizeof(macAddr),
+             "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/current_out");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->current_out);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/%s/availability", macAddr);
+    //    snprintf(payload, sizeof(payload), "%.2f", metrics->power_out_percent);
+    esp_mqtt_client_publish(client, topic, "{\"state\":\"online\"}", 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/voltage_out");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->voltage_out);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_power_out_percent");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->power_out_percent);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/voltage_in");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->voltage_in);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_current_out");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->current_out);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/power_out");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->power_out);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_voltage_out");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->voltage_out);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/power_in");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->power_in);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_voltage_in");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->voltage_in);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/energy_out");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->energy_out);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_power_out");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->power_out);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/energy_in");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->energy_in);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_power_in");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->power_in);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/temperature");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->temperature);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_energy_out");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->energy_out);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/battery_state");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->battery_state);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_energy_in");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->energy_in);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/battery_voltage");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->battery_voltage);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_temperature");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->temperature);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 
-    snprintf(topic, sizeof(topic), "ups_esp32_srv/metrics/frequency");
-    snprintf(payload, sizeof(payload), "%.2f", metrics->frequency);
-    esp_mqtt_client_publish(client, topic, payload, 0, 1, 0);
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_battery_state");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->battery_state);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_battery_voltage");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->battery_voltage);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "UPS_ESP32_tinySrv/Sensor_frequency");
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->frequency);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
 }
 
 static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
@@ -105,6 +115,8 @@ void generateJSON_mqtt_setup(SensorData *sensor, char *output, size_t max_length
 
     ESP_LOGI(TAG, "Gerando o JSON MQTT");
 
+    printf("availability_mode: '%s'\n", sensor->availability_mode);
+
     snprintf(output, max_length,
              "{\n"
              "  \"availability\": [\n"
@@ -126,6 +138,7 @@ void generateJSON_mqtt_setup(SensorData *sensor, char *output, size_t max_length
              "    \"sw\": \"%s\",\n"
              "    \"url\": \"%s\"\n"
              "  },\n"
+             "  \"name\": \"%s\",\n"
              "  \"state_class\": \"%s\",\n"
              "  \"state_topic\": \"%s\",\n"
              "  \"unique_id\": \"%s\",\n"
@@ -140,14 +153,16 @@ void generateJSON_mqtt_setup(SensorData *sensor, char *output, size_t max_length
              sensor->enabled_by_default ? "true" : "false",
              sensor->object_id,
              sensor->origin.name, sensor->origin.sw, sensor->origin.url,
+             sensor->name,
              sensor->state_class, sensor->state_topic, sensor->unique_id,
              sensor->unit_of_measurement, sensor->value_template);
 }
-void SensorSetup(SensorData *sensor, char *type_sensor, char *unit_sensor, char *macaddress)
+
+void SensorSetup(SensorData *sensor, TypeInfo *type_sensor, char *macaddress)
 {
     char aux[64];
 
-    ESP_LOGI(TAG, "Simm 1");
+    ESP_LOGI(TAG, "Preenchendo o Struct do Sensor");
 
     // Fill availability
     sensor->availability_count = 1;
@@ -158,7 +173,6 @@ void SensorSetup(SensorData *sensor, char *type_sensor, char *unit_sensor, char 
     strcpy(sensor->availability[0].value_template, VALUE_TEMPLATE_0);
 
     // Set availability mode
-
     strcpy(sensor->availability_mode, AVAILABILITY_MODE);
 
     // Fill device information
@@ -171,18 +185,22 @@ void SensorSetup(SensorData *sensor, char *type_sensor, char *unit_sensor, char 
     snprintf(aux, sizeof(aux), NAME, macaddress);
     strcpy(sensor->device.name, aux);
 
-    strcpy(sensor->device.via_device, VIA_DEVICE);
+    snprintf(aux, sizeof(aux), VIA_DEVICE, macaddress);
+    strcpy(sensor->device.via_device, aux);
 
     // Set device class
-    snprintf(aux, sizeof(aux), DEVICE_CLASS, type_sensor);
+    snprintf(aux, sizeof(aux), DEVICE_CLASS, type_sensor->device);
     strcpy(sensor->device_class, aux);
 
     // Set enabled_by_default
     sensor->enabled_by_default = true;
 
     // Set object_id
-    snprintf(aux, sizeof(aux), OBJECT_ID, type_sensor);
+    snprintf(aux, sizeof(aux), OBJECT_ID, type_sensor->type);
     strcpy(sensor->object_id, aux);
+
+    // Name
+    strcpy(sensor->name, type_sensor->name);
 
     // Fill origin information
     strcpy(sensor->origin.name, ORIGIN_NAME);
@@ -193,24 +211,26 @@ void SensorSetup(SensorData *sensor, char *type_sensor, char *unit_sensor, char 
     strcpy(sensor->state_class, STATE_CLASS);
 
     // Set state_topic
-    snprintf(aux, sizeof(aux), STATE_TOPIC, type_sensor);
+    snprintf(aux, sizeof(aux), STATE_TOPIC, type_sensor->type);
     strcpy(sensor->state_topic, aux);
 
     // Set unique_id
-    snprintf(aux, sizeof(aux), UNIQUE_ID, macaddress, type_sensor);
+    snprintf(aux, sizeof(aux), UNIQUE_ID, macaddress, type_sensor->type);
     strcpy(sensor->unique_id, aux);
 
     // Set unit_of_measurement
-    snprintf(aux, sizeof(aux), UNIT_OF_MEASUREMENT, unit_sensor);
+    snprintf(aux, sizeof(aux), UNIT_OF_MEASUREMENT, type_sensor->unit);
     strcpy(sensor->unit_of_measurement, aux);
 
     // Set value_template
-    snprintf(aux, sizeof(aux), VALUE_TEMPLATE, type_sensor);
+    snprintf(aux, sizeof(aux), VALUE_TEMPLATE, "value");
     strcpy(sensor->value_template, aux);
 }
+
 void setup_mqtt()
 {
     ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
+
     static char topic[64];
     static char json_mqtt[2048];
 
@@ -227,17 +247,18 @@ void setup_mqtt()
     ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
 
     // Create an array of TypeInfo
-    const TypeInfo typeInfoArray[] = {
-        {TYPE_POWER_OUT_PERCENT, "%"},
-        {TYPE_CURRENT_OUT, "A"},
-        {TYPE_VOLTAGE_OUT, "V"},
-        {TYPE_VOLTAGE_IN, "V"},
-        {TYPE_POWER_OUT, "W"},
-        {TYPE_POWER_IN, "W"},
-        {TYPE_TEMPERATURE, "°C"},
-        {TYPE_BATTERY_STATE, "%"},
-        {TYPE_BATTERY_VOLTAGE, "V"},
-        {TYPE_FREQUENCY, "Hz"}};
+    static TypeInfo typeInfoArray[] = {
+        {TYPE_POWER_OUT_PERCENT, "%", DEVICE_POWER_OUT_PERCENT, NAME_POWER_OUT_PERCENT},
+        {TYPE_CURRENT_OUT, "A", DEVICE_CURRENT_OUT, NAME_CURRENT_OUT},
+        {TYPE_VOLTAGE_OUT, "V", DEVICE_VOLTAGE_OUT, NAME_VOLTAGE_OUT},
+        {TYPE_VOLTAGE_IN, "V", DEVICE_VOLTAGE_IN, NAME_VOLTAGE_IN},
+        {TYPE_POWER_OUT, "W", DEVICE_POWER_OUT, NAME_POWER_OUT},
+        {TYPE_POWER_IN, "W", DEVICE_POWER_IN, NAME_POWER_IN},
+        {TYPE_TEMPERATURE, "°C", DEVICE_TEMPERATURE, NAME_TEMPERATURE},
+        {TYPE_BATTERY_STATE, "%", DEVICE_BATTERY_STATE, NAME_BATTERY_STATE},
+        {TYPE_BATTERY_VOLTAGE, "V", DEVICE_BATTERY_VOLTAGE, NAME_BATTERY_VOLTAGE},
+        {TYPE_FREQUENCY, "Hz", DEVICE_FREQUENCY, NAME_FREQUENCY}};
+
     ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
 
     // Size of the array
@@ -246,27 +267,35 @@ void setup_mqtt()
     ESP_LOGI(TAG, "Gera Base do MQTT");
 
     static SensorData sensor;
+    static TypeInfo arrayInfoDevice;
 
-    ESP_LOGI(TAG, "Topico Inicial");
-    snprintf(topic, sizeof(topic), "%s%s/%s/%s", TOPIC_SETUP, macAddr, typeInfoArray[0].type, TOPIC_CONFIG);
+    // Iterando pelo array com um for
+    for (int i = 0; i < typeInfoArraySize; i++)
+    {
 
-    ESP_LOGI(TAG, "Topico : %s", topic);
+        arrayInfoDevice = typeInfoArray[i];
 
-    ESP_LOGI(TAG, "Setup Sensor");
+        ESP_LOGI(TAG, "Topico Inicial");
+        snprintf(topic, sizeof(topic), "%s%s/%s/%s", TOPIC_SETUP, macAddr, arrayInfoDevice.type, TOPIC_CONFIG);
 
-    ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
+        ESP_LOGI(TAG, "Topico : %s", topic);
 
-    // Populate the structure using the function
-    SensorSetup(&sensor, typeInfoArray[0].type, typeInfoArray[0].unit, macAddr);
+        ESP_LOGI(TAG, "Setup Sensor");
 
-    ESP_LOGI(TAG, "Gera JSON");
-    // Gera o JSON a partir da estrutura preenchida
-    generateJSON_mqtt_setup(&sensor, json_mqtt, sizeof(json_mqtt));
+        ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
 
-    // Exibe o JSON gerado
-    printf("JSON Gerado:\n%s\n", json_mqtt);
+        // Populate the structure using the function
+        SensorSetup(&sensor, &arrayInfoDevice, macAddr);
 
-    // esp_mqtt_client_publish(client, topic, json_mqtt, 0, 1, 0);
+        ESP_LOGI(TAG, "Gera JSON");
+        // Gera o JSON a partir da estrutura preenchida
+        generateJSON_mqtt_setup(&sensor, json_mqtt, sizeof(json_mqtt));
+
+        // Exibe o JSON gerado
+        printf("JSON Gerado:\n%s\n", json_mqtt);
+
+        esp_mqtt_client_publish(client, topic, json_mqtt, 0, 1, 1);
+    }
 }
 
 void mqtt_app_start(void)

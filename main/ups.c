@@ -267,8 +267,11 @@ void ups_start(void)
         .event_cb = handle_event,
         .data_cb = handle_rx};
 
+    ESP_LOGI(TAG, "Step 3");
+
     while (true)
     {
+
         vTaskDelay(pdMS_TO_TICKS(1000));
 
         if (lConected)
