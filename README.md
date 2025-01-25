@@ -29,7 +29,7 @@ This project aims to develop a system using an ESP32-S3 microcontroller to monit
 
 Edit the file Kconfig.projbuild.example with your wifi parameters and the mqtt address.
 
-Remove the file the extension .example build the project in your ESP32-S3 device.
+Remove the file the extension .example before build the project in your ESP32-S3 device.
 
 ## ⛏️ Built Using <a name = "built_using"></a>
 
