@@ -91,6 +91,6 @@ void usb_lib_task(void *arg);
 /**
  * Inicializa a aplicação UPS.
  */
-void ups_start(void);
+void ups_start();
 
 #endif // UPS_H

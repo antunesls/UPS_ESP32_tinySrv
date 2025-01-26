@@ -15,3 +15,5 @@ sdkconfig.old
 
 #env
 main/Kconfig.projbuild
+sdkconfig
+sdkconfig.old
