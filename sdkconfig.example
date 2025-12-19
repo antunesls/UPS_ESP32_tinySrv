@@ -1,0 +1,24 @@
+# Example configuration file for UPS ESP32 TinySrv
+# Copy this file to sdkconfig.defaults and edit the values
+
+# WiFi Configuration
+CONFIG_ESP_WIFI_SSID="your_wifi_ssid"
+CONFIG_ESP_WIFI_PASSWORD="your_wifi_password"
+CONFIG_ESP_MAXIMUM_RETRY=5
+
+# WiFi Auth Mode
+CONFIG_ESP_WIFI_AUTH_WPA2_PSK=y
+
+# WPA3 SAE Mode
+CONFIG_ESP_WPA3_SAE_PWE_BOTH=y
+
+# MQTT Configuration
+CONFIG_BROKER_URL="mqtt://your_mqtt_broker_ip:1883"
+CONFIG_BROKER_PORT=1883
+CONFIG_BROKER_USERNAME=""
+CONFIG_BROKER_PASSWORD=""
+
+# UPS Configuration
+CONFIG_UPS_POLL_INTERVAL_MS=5000
+CONFIG_UPS_VENDOR_ID=0x0001
+CONFIG_UPS_PRODUCT_ID=0x0000
