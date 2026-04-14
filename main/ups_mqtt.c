@@ -1,10 +1,14 @@
 #include "ups_mqtt.h"
 #include "ups.h"
 #include "wifi.h"
+#include "led_status.h"
 
 static const char *TAG = "UPS-MQTT";
 
 esp_mqtt_client_handle_t client;
+
+// Forward declaration
+static void setup_mqtt(void);
 
 // Função para publicar os dados via MQTT em tópicos separados
 void publish_metrics(const ups_metricts_t *metrics)
@@ -90,6 +94,15 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
     {
     case MQTT_EVENT_CONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+        led_status_set(LED_STATE_UPS_DISCONNECTED);
+        {
+            static bool setup_done = false;
+            if (!setup_done)
+            {
+                setup_done = true;
+                setup_mqtt();
+            }
+        }
         break;
     case MQTT_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
@@ -229,7 +242,7 @@ void SensorSetup(SensorData *sensor, TypeInfo *type_sensor, char *macaddress)
     strcpy(sensor->value_template, aux);
 }
 
-void setup_mqtt()
+static void setup_mqtt(void)
 {
     ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
 
@@ -311,8 +324,4 @@ void mqtt_app_start(void)
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
     esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
     esp_mqtt_client_start(client);
-
-    ESP_LOGI(TAG, "Setup MQTT");
-
-    setup_mqtt();
 }

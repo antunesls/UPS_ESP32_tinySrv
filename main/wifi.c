@@ -1,4 +1,5 @@
 #include "wifi.h"
+#include "led_status.h"
 
 // static const char *TAG = "wifi station";
 
@@ -36,7 +37,7 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
     }
 }
 
-void wifi_init_sta(void)
+bool wifi_init_sta(void)
 
 {
     s_wifi_event_group = xEventGroupCreate();
@@ -94,27 +95,34 @@ void wifi_init_sta(void)
      * happened. */
     if (bits & WIFI_CONNECTED_BIT)
     {
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+        ESP_LOGI(TAG, "connected to ap SSID:%s",
+                 EXAMPLE_ESP_WIFI_SSID);
     }
     else if (bits & WIFI_FAIL_BIT)
     {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s",
-                 EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS);
+        ESP_LOGE(TAG, "Failed to connect to SSID:%s",
+                 EXAMPLE_ESP_WIFI_SSID);
     }
     else
     {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
     }
+
+    return (bits & WIFI_CONNECTED_BIT) != 0;
 }
 
 bool lConnectWIFI()
 {
-
-    wifi_init_sta();
+    led_status_set(LED_STATE_WIFI_CONNECTING);
+    bool connected = wifi_init_sta();
 
     ESP_LOGI(TAG, "Conectando Wifi");
     vTaskDelay(pdMS_TO_TICKS(5000)); // Permite que o watchdog seja alimentado
 
-    return true;
+    if (connected)
+    {
+        led_status_set(LED_STATE_MQTT_CONNECTING);
+    }
+
+    return connected;
 }

@@ -57,7 +57,7 @@
 
 
 // Declarações de funções
-void wifi_init_sta(void);
+bool wifi_init_sta(void);
 bool lConnectWIFI(void);
 
 #endif // WIFI_MANAGER_H

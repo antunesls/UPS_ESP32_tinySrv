@@ -1,5 +1,6 @@
 #include "ups.h"
 #include "ups_mqtt.h"
+#include "led_status.h"
 
 //====
 
@@ -13,11 +14,18 @@ static const char *TAG = "UPS-Srv";
 
 static SemaphoreHandle_t device_disconnected_sem;
 
+// Tamanho mínimo do pacote de dados do UPS (offset máximo decodificado é 0x1E = 30)
+#define UPS_MIN_PACKET_SIZE 31
+
 static const uint8_t cmd_req1[] = {0xFF, 0xFE, 0x00, 0x8E, 0x01, 0x8F};
-static const uint8_t cmd_req2[] = {0xAA, 0x04, 0x00, 0x80, 0x1E, 0x9E};
+// cmd_req2 e cmd_get_data são o mesmo frame; cmd_get_data é reutilizado na inicialização
 static const uint8_t cmd_get_data[] = {0xAA, 0x04, 0x00, 0x80, 0x1E, 0x9E};
 
 static const usb_device_desc_t *dev_desc;
+
+// Métricas globais acessíveis pelo servidor web
+volatile ups_metricts_t g_ups_metrics = {0};
+volatile bool g_ups_connected = false;
 
 static bool lConected = false;
 
@@ -110,8 +118,6 @@ ups_metricts_t build_payload(const uint8_t *buffer, char *output_json, size_t ou
         .battery_voltage = linear(buffer[0x0B], 0.0671, 0),
         .frequency = linear(buffer[0x18], -0.1152, 65)};
 
-    publish_metrics(&metrics);
-
     return metrics;
 }
 
@@ -131,10 +137,12 @@ bool handle_rx(const uint8_t *data, size_t data_len, void *arg)
         ESP_LOGI(TAG, "Tamanho buffer %u", xBufferIndex);
 
         // Verifica se recebeu dados suficientes
-        if (xBufferIndex >= 31)
+        if (xBufferIndex >= UPS_MIN_PACKET_SIZE)
         {
             char json_payload[512];
-            build_payload(xBuffer, json_payload, sizeof(json_payload));
+            ups_metricts_t metrics = build_payload(xBuffer, json_payload, sizeof(json_payload));
+            publish_metrics(&metrics);
+            g_ups_metrics = metrics;
             ESP_LOGI(TAG, "Payload: %s", json_payload);
             xBufferIndex = 0; // Reset buffer for next use
         }
@@ -148,20 +156,10 @@ bool handle_rx(const uint8_t *data, size_t data_len, void *arg)
     return true;
 }
 
-// Callback para processar novo dispositovs
+// Callback para processar novo dispositivo
 void handle_newdev(usb_device_handle_t usb_dev)
 {
-
-    // Aloca memória para o descritor do dispositivo
-    dev_desc = (usb_device_desc_t *)malloc(sizeof(usb_device_desc_t));
-
-    if (dev_desc == NULL)
-    {
-        ESP_LOGE(TAG, "Falha ao alocar memória para o descritor do dispositivo");
-        return;
-    }
-
-    // Obtém o descritor do dispositivo
+    // O descritor é gerenciado internamente pelo USB Host; não aloca memória própria
     esp_err_t err = usb_host_get_device_descriptor(usb_dev, &dev_desc);
 
     if (err != ESP_OK)
@@ -174,6 +172,8 @@ void handle_newdev(usb_device_handle_t usb_dev)
     ESP_LOGI(TAG, "Dispositivo conectado: VID=0x%04X, PID=0x%04X", dev_desc->idVendor, dev_desc->idProduct);
 
     lConected = true;
+    g_ups_connected = true;
+    led_status_set(LED_STATE_ALL_OK);
 }
 
 // Callback de eventos do dispositivo
@@ -190,6 +190,8 @@ void handle_event(const cdc_acm_host_dev_event_data_t *event, void *user_ctx)
     case CDC_ACM_HOST_DEVICE_DISCONNECTED:
         ESP_LOGI(TAG, "Dispositivo desconectado");
         ESP_ERROR_CHECK(cdc_acm_host_close(event->data.cdc_hdl));
+        g_ups_connected = false;
+        led_status_set(LED_STATE_UPS_DISCONNECTED);
         xSemaphoreGive(device_disconnected_sem);
         break;
     case CDC_ACM_HOST_SERIAL_STATE:
@@ -278,12 +280,6 @@ void ups_start(void)
         {
             cdc_acm_dev_hdl_t cdc_dev = NULL;
 
-            while (!lConected)
-            {
-                ESP_LOGI(TAG, "Procurando dispositivos");
-                vTaskDelay(pdMS_TO_TICKS(1000));
-            }
-
             // Abre o dispositivo USB
             ESP_LOGI(TAG, "Abrindo dispositivo CDC ACM 0x%04X:0x%04X...", dev_desc->idVendor, dev_desc->idProduct);
             esp_err_t err = cdc_acm_host_open(dev_desc->idVendor, dev_desc->idProduct, 0, &dev_config, &cdc_dev);
@@ -296,6 +292,10 @@ void ups_start(void)
 
             if (lConected)
             {
+                // Garante DTR=0 e RTS=0 imediatamente após a abertura para não
+                // sinalizar desligamento ao nobreak via linhas de controle serial
+                ESP_ERROR_CHECK(cdc_acm_host_set_control_line_state(cdc_dev, false, false));
+                vTaskDelay(pdMS_TO_TICKS(200));
 
                 ESP_LOGI(TAG, "Setting up line coding");
 
@@ -310,7 +310,10 @@ void ups_start(void)
                          line_coding.dwDTERate, line_coding.bCharFormat, line_coding.bParityType, line_coding.bDataBits);
 
                 // cdc_acm_host_desc_print(cdc_dev);
-                vTaskDelay(pdMS_TO_TICKS(100));
+                vTaskDelay(pdMS_TO_TICKS(500));
+
+                // Limpa buffer antes de enviar comandos (descarta dados da enumeração USB)
+                xBufferIndex = 0;
 
                 // Envia comandos e solicita dados
                 ESP_LOGI(TAG, "Send CMD1...");
@@ -323,11 +326,11 @@ void ups_start(void)
                 vTaskDelay(pdMS_TO_TICKS(100));
 
                 ESP_LOGI(TAG, "Send CMD2...");
-                ESP_LOG_BUFFER_HEXDUMP(TAG, cmd_req2, sizeof(cmd_req2), ESP_LOG_VERBOSE);
+                ESP_LOG_BUFFER_HEXDUMP(TAG, cmd_get_data, sizeof(cmd_get_data), ESP_LOG_VERBOSE);
 
                 if (lConected)
                 {
-                    ESP_ERROR_CHECK(cdc_acm_host_data_tx_blocking(cdc_dev, cmd_req2, sizeof(cmd_req2), EXAMPLE_TX_TIMEOUT_MS));
+                    ESP_ERROR_CHECK(cdc_acm_host_data_tx_blocking(cdc_dev, cmd_get_data, sizeof(cmd_get_data), EXAMPLE_TX_TIMEOUT_MS));
                 };
 
                 vTaskDelay(pdMS_TO_TICKS(100));

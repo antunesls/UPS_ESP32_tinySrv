@@ -30,6 +30,10 @@ typedef struct
     float frequency;
 } ups_metricts_t;
 
+// Métricas globais acessíveis pelo servidor web
+extern volatile ups_metricts_t g_ups_metrics;
+extern volatile bool g_ups_connected;
+
 // Funções declaradas no arquivo .c
 
 /**

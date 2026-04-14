@@ -12,6 +12,7 @@ sdkconfig.old
 \.vscode
 \.devcontainer
 \managed_components
+dependencies.lock
 
 #env
 sdkconfig

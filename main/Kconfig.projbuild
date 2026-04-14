@@ -119,4 +119,26 @@ menu "UPS ESP32 TinySrv Configuration"
 
     endmenu
 
+    menu "LED Configuration"
+
+        config LED_GPIO
+            int "LED GPIO pin"
+            default 48
+            help
+                GPIO number of the onboard WS2812 RGB LED.
+                On most ESP32-S3 DevKit boards this is GPIO 48.
+
+    endmenu
+
+    menu "Web Server Configuration"
+
+        config WEB_SERVER_PORT
+            int "HTTP server port"
+            default 80
+            range 1 65535
+            help
+                Port number for the embedded HTTP web server.
+
+    endmenu
+
 endmenu

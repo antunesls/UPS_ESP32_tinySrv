@@ -32,18 +32,19 @@ This project is base on the need to monitoring the UPS Ragtech Easy Pro 1200VA (
 //====
 
 #include "wifi.h"
+#include "wifi_manager.h"
 #include "ups_mqtt.h"
 #include "ups.h"
+#include "led_status.h"
+#include "web_server.h"
 
 static const char *TAG = "UPS-Srv";
-
-static void setup()
-{
-}
 
 // Aplicação principal
 void app_main(void)
 {
+    led_status_init();
+    led_status_set(LED_STATE_BOOTING);
 
     //=================WIFI======================================
     // Initialize NVS
@@ -57,13 +58,22 @@ void app_main(void)
 
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
 
-    if (lConnectWIFI())
+    if (wifi_manager_start())
     {
         mqtt_app_start();
+        web_server_start();
 
         TaskHandle_t taks1Handle = NULL;
         xTaskCreate(ups_start, "Start_UPS", 4096, NULL, 10, &taks1Handle);
 
+        while (1)
+        {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
+    }
+    else
+    {
+        led_status_set(LED_STATE_WIFI_FAILED);
         while (1)
         {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
