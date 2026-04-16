@@ -10,6 +10,54 @@ esp_mqtt_client_handle_t client;
 // Forward declaration
 static void setup_mqtt(void);
 
+// Publica cada flag de status como "ON" ou "OFF" em tópico dedicado
+void publish_status(const ups_status_t *s)
+{
+    if (client == NULL || s == NULL) return;
+
+    char topic[128], topicbase[80];
+    uint8_t mac[6];
+    char macAddr[13];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    snprintf(macAddr, sizeof(macAddr), "%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(topicbase, sizeof(topicbase), "UPS_ESP32_tinySrv/%s/status", macAddr);
+
+#define PUB_FLAG(name, val) \
+    do { \
+        snprintf(topic, sizeof(topic), "%s/" name, topicbase); \
+        esp_mqtt_client_publish(client, topic, (val) ? "ON" : "OFF", 0, 1, 0); \
+    } while (0)
+
+    PUB_FLAG("op_battery",            s->op_battery);
+    PUB_FLAG("op_stand_by",           s->op_stand_by);
+    PUB_FLAG("op_warning",            s->op_warning);
+    PUB_FLAG("op_startup",            s->op_startup);
+    PUB_FLAG("op_checkup",            s->op_checkup);
+    PUB_FLAG("no_v_input",            s->no_v_input);
+    PUB_FLAG("lo_v_input",            s->lo_v_input);
+    PUB_FLAG("hi_v_input",            s->hi_v_input);
+    PUB_FLAG("lo_f_input",            s->lo_f_input);
+    PUB_FLAG("hi_f_input",            s->hi_f_input);
+    PUB_FLAG("no_sync_input",         s->no_sync_input);
+    PUB_FLAG("lo_battery",            s->lo_battery);
+    PUB_FLAG("noise_input",           s->noise_input);
+    PUB_FLAG("max_battery",           s->max_battery);
+    PUB_FLAG("sync_input",            s->sync_input);
+    PUB_FLAG("shutdown_timer_active", s->shutdown_timer_active);
+    PUB_FLAG("remote_control_active", s->remote_control_active);
+    PUB_FLAG("fail_overtemp",         s->fail_overtemp);
+    PUB_FLAG("fail_internal",         s->fail_internal);
+    PUB_FLAG("fail_overload",         s->fail_overload);
+    PUB_FLAG("fail_shortcircuit",     s->fail_shortcircuit);
+    PUB_FLAG("fail_end_battery",      s->fail_end_battery);
+    PUB_FLAG("fail_abnormal_vout",    s->fail_abnormal_vout);
+    PUB_FLAG("fail_abnormal_vbat",    s->fail_abnormal_vbat);
+    PUB_FLAG("fail_inverter",         s->fail_inverter);
+
+#undef PUB_FLAG
+}
+
 // Função para publicar os dados via MQTT em tópicos separados
 void publish_metrics(const ups_metricts_t *metrics)
 {
@@ -242,6 +290,70 @@ void SensorSetup(SensorData *sensor, TypeInfo *type_sensor, char *macaddress)
     strcpy(sensor->value_template, aux);
 }
 
+static void setup_binary_sensors(const char *macaddress)
+{
+    static char topic[128];
+    static char json[640];
+
+    static const struct {
+        const char *type;
+        const char *name;
+        const char *dclass;
+    } sensors[] = {
+        {"op_battery",            "Na Bateria",           "battery_charging"},
+        {"no_v_input",            "Sem Rede",             "plug"},
+        {"lo_v_input",            "Tensao Entrada Baixa", "problem"},
+        {"hi_v_input",            "Tensao Entrada Alta",  "problem"},
+        {"lo_battery",            "Bateria Baixa",        "battery"},
+        {"max_battery",           "Bateria Carregada",    "battery_charging"},
+        {"op_stand_by",           "Modo Stand-by",        "problem"},
+        {"op_warning",            "Aviso Geral",          "problem"},
+        {"shutdown_timer_active", "Timer Desligamento",   "problem"},
+        {"remote_control_active", "Controle Remoto",      "connectivity"},
+        {"fail_overtemp",         "Sobretemperatura",     "heat"},
+        {"fail_overload",         "Sobrecarga",           "problem"},
+        {"fail_inverter",         "Falha Inversor",       "problem"},
+        {"fail_end_battery",      "Bateria Esgotada",     "problem"},
+        {"fail_shortcircuit",     "Curto-Circuito",       "problem"},
+    };
+
+    const size_t n = sizeof(sensors) / sizeof(sensors[0]);
+
+    char avail_topic[96];
+    snprintf(avail_topic, sizeof(avail_topic),
+             "UPS_ESP32_tinySrv/%s/availability", macaddress);
+
+    for (size_t i = 0; i < n; i++) {
+        snprintf(topic, sizeof(topic),
+            "homeassistant/binary_sensor/%s/%s/config",
+            macaddress, sensors[i].type);
+
+        snprintf(json, sizeof(json),
+            "{"
+            "\"name\":\"%s\","
+            "\"device_class\":\"%s\","
+            "\"state_topic\":\"UPS_ESP32_tinySrv/%s/status/%s\","
+            "\"payload_on\":\"ON\","
+            "\"payload_off\":\"OFF\","
+            "\"unique_id\":\"%s_%s_ups_bin\","
+            "\"availability\":[{\"topic\":\"%s\","
+              "\"value_template\":\"{{value_json.state}}\"}],"
+            "\"device\":{"
+              "\"identifiers\":[\"UPS_ESP32_tinySrv_%s\"],"
+              "\"name\":\"UPS_ESP32_tinySrv_%s\","
+              "\"manufacturer\":\"Lucas Souza\","
+              "\"model\":\"UPS_ESP32_tinySrv\"}"
+            "}",
+            sensors[i].name, sensors[i].dclass,
+            macaddress, sensors[i].type,
+            macaddress, sensors[i].type,
+            avail_topic,
+            macaddress, macaddress);
+
+        esp_mqtt_client_publish(client, topic, json, 0, 1, 1);
+    }
+}
+
 static void setup_mqtt(void)
 {
     ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
@@ -311,14 +423,25 @@ static void setup_mqtt(void)
 
         esp_mqtt_client_publish(client, topic, json_mqtt, 0, 1, 1);
     }
+
+    // Publica discovery para binary_sensors de status/alarmes
+    setup_binary_sensors(macAddr);
 }
 
 void mqtt_app_start(void)
 {
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri = URI_BROKER,
-        //.broker.address.uri = "mqtt://test.mosquitto.org",
+        .broker.address.uri  = URI_BROKER,
+        .broker.address.port = CONFIG_BROKER_PORT,
     };
+
+    // Credenciais opcionais (somente se configuradas)
+    if (strlen(CONFIG_BROKER_USERNAME) > 0) {
+        mqtt_cfg.credentials.username = CONFIG_BROKER_USERNAME;
+    }
+    if (strlen(CONFIG_BROKER_PASSWORD) > 0) {
+        mqtt_cfg.credentials.authentication.password = CONFIG_BROKER_PASSWORD;
+    }
 
     client = esp_mqtt_client_init(&mqtt_cfg);
     /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */

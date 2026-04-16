@@ -1,6 +1,16 @@
 #include "ups.h"
 #include "ups_mqtt.h"
 #include "led_status.h"
+#include "nvs_flash.h"
+#include "nvs.h"
+
+// Fallback para quando o sdkconfig ainda não gerou os símbolos (análise de IDE)
+#ifndef CONFIG_UPS_VA_RATING
+#define CONFIG_UPS_VA_RATING    1200
+#endif
+#ifndef CONFIG_UPS_POWER_FACTOR
+#define CONFIG_UPS_POWER_FACTOR 70
+#endif
 
 //====
 
@@ -14,7 +24,19 @@ static const char *TAG = "UPS-Srv";
 
 static SemaphoreHandle_t device_disconnected_sem;
 
-// Tamanho mínimo do pacote de dados do UPS (offset máximo decodificado é 0x1E = 30)
+// Resposta real: 1 byte SOF (0xAA) + 5 bytes header + 25 bytes dados = 31 bytes.
+// Valores verificados empiricamente com buffer hex real do dispositivo:
+//
+//  buffer[0x0B] = 200  V_VBATTERY x0.0671 → 13.4 V  (bat. 12V)
+//  buffer[0x0C] = 196  V_VINPUT   direto  → 196 V
+//  buffer[0x0D] =   9  V_IOUTPUT  x0.1152 →  1.0 A   (INF) / x0.0510 (SEN)
+//  buffer[0x0F] =  47  V_POUTPUT  direto  →  47 %
+//  buffer[0x10] = 103  V_FOUTPUT  x0.5825 →  60 Hz
+//  buffer[0x16] =   1  V_TEMPER   direto  →   1 °C   (INFINIUM)
+//  buffer[0x18] =  72  V_CBATTERY direto  →  72 %
+//  buffer[0x1E] = 198  V_VOUTPUT  x0.5550 → 110 V   (INF) / x0.6000 (SEN)
+//
+// ATENÇÃO: buffer[0x1E] = índice 30; o pacote mínimo deve ser 31 bytes.
 #define UPS_MIN_PACKET_SIZE 31
 
 static const uint8_t cmd_req1[] = {0xFF, 0xFE, 0x00, 0x8E, 0x01, 0x8F};
@@ -23,9 +45,13 @@ static const uint8_t cmd_get_data[] = {0xAA, 0x04, 0x00, 0x80, 0x1E, 0x9E};
 
 static const usb_device_desc_t *dev_desc;
 
-// Métricas globais acessíveis pelo servidor web
+// Globais acessíveis pelo servidor web e MQTT
 volatile ups_metricts_t g_ups_metrics = {0};
-volatile bool g_ups_connected = false;
+volatile ups_status_t   g_ups_status  = {0};
+volatile bool           g_ups_connected = false;
+
+uint8_t  g_ups_raw_buf[UPS_RAW_BUF_SIZE] = {0};
+size_t   g_ups_raw_len = 0;
 
 static bool lConected = false;
 
@@ -40,85 +66,191 @@ float linear(uint8_t val, float a, float b)
     return roundf(result * factor) / factor;
 }
 
-// Processamento de potência: equivalente ao processPower() em Python
-void processPower(float wOut, float wIn, float *power_current_kwh_out, float *power_current_kwh_in, int64_t *power_last_update)
-{
-    int64_t curr = esp_log_timestamp() / 1000; // Obtendo o tempo atual em segundos
-    float diff = (curr - *power_last_update);  // em segundos
-    *power_last_update = curr;
+#define NVS_NAMESPACE   "ups_energy"
+#define NVS_KEY_KWH_OUT "kwh_out"
+#define NVS_KEY_KWH_IN  "kwh_in"
+// Salva a cada 60 s para não desgastar a flash
+#define ENERGY_SAVE_INTERVAL_S  60
 
-    *power_current_kwh_out += (wOut / 1000.0) * (diff / 3600.0);
-    *power_current_kwh_in += (wIn / 1000.0) * (diff / 3600.0);
+static void energy_load(float *kwh_out, float *kwh_in)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return;
+    uint32_t raw;
+    if (nvs_get_u32(h, NVS_KEY_KWH_OUT, &raw) == ESP_OK)
+        memcpy(kwh_out, &raw, sizeof(float));
+    if (nvs_get_u32(h, NVS_KEY_KWH_IN, &raw) == ESP_OK)
+        memcpy(kwh_in, &raw, sizeof(float));
+    nvs_close(h);
 }
 
-// Construir payload: equivalente ao build_payload() em Python
+static void energy_save(float kwh_out, float kwh_in)
+{
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) return;
+    uint32_t raw;
+    memcpy(&raw, &kwh_out, sizeof(float));
+    nvs_set_u32(h, NVS_KEY_KWH_OUT, raw);
+    memcpy(&raw, &kwh_in, sizeof(float));
+    nvs_set_u32(h, NVS_KEY_KWH_IN, raw);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+// Processamento de potência: acumula energia e persiste no NVS periodicamente.
+void processPower(float wOut, float wIn, float *power_current_kwh_out, float *power_current_kwh_in, int64_t *power_last_update)
+{
+    int64_t curr = esp_log_timestamp() / 1000; // segundos desde boot
+    float diff = (float)(curr - *power_last_update);
+    *power_last_update = curr;
+
+    *power_current_kwh_out += (wOut / 1000.0f) * (diff / 3600.0f);
+    *power_current_kwh_in  += (wIn  / 1000.0f) * (diff / 3600.0f);
+
+    // Persistência periódica no NVS
+    static int64_t last_save = 0;
+    if (curr - last_save >= ENERGY_SAVE_INTERVAL_S) {
+        last_save = curr;
+        energy_save(*power_current_kwh_out, *power_current_kwh_in);
+    }
+}
+
+// Decodifica o buffer de resposta do UPS.
+// Mapeamento EMPÍRICO verificado com buffer hex real (31 bytes totais).
+// Correções confirmadas por consistência cruzada com alarmes de status:
+//
+//  buffer[0x08]  V_CBATTERY  x0.3920  (— raw 0xFF = 100 %) consistente com max_battery
+//  buffer[0x0B]  V_VBATTERY  x0.0671  (V)   bateria ~12 V
+//  buffer[0x0C]  V_VINPUT    direto   (V)
+//  buffer[0x0D]  V_IOUTPUT   x0.1152  (INF) / x0.0510 (SEN)
+//  buffer[0x0F]  V_TEMPER    direto   (°C)  consistente com alarme Sobretemperatura
+//  buffer[0x10]  V_FOUTPUT   x0.5825  (Hz)
+//  buffer[0x13]  flags falha (bits 0-7)
+//  buffer[0x14]  flags entrada (bits 0-7)  — confirmado via cmd_req1 (0x008E)
+//  buffer[0x15]  flags operacional (bits 3-7)
+//  buffer[0x17]  flags bateria/timers (bits 0,1,4)
+//  buffer[0x18]  V_POUTPUT   direto   (%)   carga da saída
+//  buffer[0x1B]  flags controle (bits 3,5)
+//  buffer[0x1E]  V_VOUTPUT   x0.5550  (INF) / x0.6000 (SEN)
 
 ups_metricts_t build_payload(const uint8_t *buffer, char *output_json, size_t output_size)
 {
-    static float power_current_kwh_out = 0.0;
-    static float power_current_kwh_in = 0.0;
-    static int64_t power_last_update = 0;
+    static float   power_current_kwh_out = 0.0f;
+    static float   power_current_kwh_in  = 0.0f;
+    static int64_t power_last_update     = 0;
 
-    // Inicializar power_last_update no app_main
-    if (power_last_update == 0)
-    {
-        power_last_update = esp_log_timestamp() / 1000; // Obtendo o tempo inicial
-    };
+    if (power_last_update == 0) {
+        energy_load(&power_current_kwh_out, &power_current_kwh_in);
+        power_last_update = esp_log_timestamp() / 1000;
+    }
 
-    float iOut = linear(buffer[0x0D], 0.1152, 0);
-    float vOut = linear(buffer[0x1E], 0.555, 0);
+    // ── Leituras analógicas ───────────────────────────────────────────────────
+    float vIn  = (float)buffer[0x0C];               // V_VINPUT  — direto (V)
+
+#if defined(CONFIG_UPS_FAMILY_SENIUM)
+    float vOut = buffer[0x1E] * 0.6000f;            // V_VOUTPUT SENIUM
+    float iOut = buffer[0x0D] * 0.0510f;            // V_IOUTPUT SENIUM
+#else   // INFINIUM (padrão)
+    float vOut = buffer[0x1E] * 0.5550f;            // V_VOUTPUT INFINIUM [buf[30]=198 → 110 V]
+    float iOut = buffer[0x0D] * 0.1152f;            // V_IOUTPUT INFINIUM [buf[13]=9  →  1.0 A]
+#endif
+
+    float temp = (float)buffer[0x0F];               // V_TEMPER  — direto (°C) [buf[15]=47 → 47°C]
+    float freq = buffer[0x10] * 0.5825f;            // V_FOUTPUT — Hz         [buf[16]=101 → 58.8 Hz]
+    float vBat = buffer[0x0B] * 0.0671f;            // V_VBATTERY — V         [buf[11]=199 → 13.4 V]
+    float cBat = buffer[0x08] * 0.3920f;            // V_CBATTERY — x0.392    [buf[8]=255  → 100%]
+
+    // Carga real calculada a partir da potência medida vs potência nominal configurada.
+    // pPct = (iOut × vOut) / (VA × PF) × 100
+    const float rated_w = (float)CONFIG_UPS_VA_RATING * ((float)CONFIG_UPS_POWER_FACTOR / 100.0f);
     float wOut = iOut * vOut;
-
-    float vIn = linear(buffer[0x0C], 1.06, 0);
-    float wIn = iOut * vIn; // Assumindo que iIn é igual a iOut
+    float wIn  = iOut * vIn;
+    float pPct = (rated_w > 0.0f) ? (wOut / rated_w * 100.0f) : 0.0f;
+    if (pPct > 100.0f) pPct = 100.0f;
 
     processPower(wOut, wIn, &power_current_kwh_out, &power_current_kwh_in, &power_last_update);
 
-    // Preparar payload JSON
     snprintf(output_json, output_size,
-             "{"
-             "\"Power_Out_Percent\":{\"value\":%.1f,\"unit\":\"%%\"},"
-             "\"Current_Out\":{\"value\":%.2f,\"unit\":\"A\"},"
-             "\"Voltage_Out\":{\"value\":%.1f,\"unit\":\"V\"},"
-             "\"Voltage_In\":{\"value\":%.1f,\"unit\":\"V\"},"
-             "\"Power_Out\":{\"value\":%.1f,\"unit\":\"W\"},"
-             "\"Power_In\":{\"value\":%.1f,\"unit\":\"W\"},"
-             "\"Energy_Out\":{\"value\":%.2f,\"unit\":\"kWh\"},"
-             "\"Energy_In\":{\"value\":%.2f,\"unit\":\"kWh\"},"
-             "\"Temperature\":{\"value\":%.1f,\"unit\":\"C\"},"
-             "\"Battery_State\":{\"value\":%.1f,\"unit\":\"%%\"},"
-             "\"Battery_Voltage\":{\"value\":%.2f,\"unit\":\"V\"},"
-             "\"Frequency\":{\"value\":%.1f,\"unit\":\"Hz\"}"
-             "}",
-             linear(buffer[0x0E], 1, 0), // Power Out
-             iOut,
-             vOut,
-             vIn,
-             wOut,
-             wIn,
-             power_current_kwh_out,
-             power_current_kwh_in,
-             linear(buffer[0x0F], 1, 0),
-             linear(buffer[0x08], 0.392, 0),
-             linear(buffer[0x0B], 0.0671, 0),
-             linear(buffer[0x18], -0.1152, 65));
+        "{"
+        "\"Power_Out_Percent\":{\"value\":%.1f,\"unit\":\"%%\"},"
+        "\"Current_Out\":{\"value\":%.3f,\"unit\":\"A\"},"
+        "\"Voltage_Out\":{\"value\":%.1f,\"unit\":\"V\"},"
+        "\"Voltage_In\":{\"value\":%.1f,\"unit\":\"V\"},"
+        "\"Power_Out\":{\"value\":%.1f,\"unit\":\"W\"},"
+        "\"Power_In\":{\"value\":%.1f,\"unit\":\"W\"},"
+        "\"Energy_Out\":{\"value\":%.3f,\"unit\":\"kWh\"},"
+        "\"Energy_In\":{\"value\":%.3f,\"unit\":\"kWh\"},"
+        "\"Temperature\":{\"value\":%.1f,\"unit\":\"C\"},"
+        "\"Battery_State\":{\"value\":%.1f,\"unit\":\"%%\"},"
+        "\"Battery_Voltage\":{\"value\":%.2f,\"unit\":\"V\"},"
+        "\"Frequency\":{\"value\":%.2f,\"unit\":\"Hz\"}"
+        "}",
+        pPct, iOut, vOut, vIn, wOut, wIn,
+        power_current_kwh_out, power_current_kwh_in,
+        temp, cBat, vBat, freq);
 
-    // Atribuicao de dados
     ups_metricts_t metrics = {
-        .power_out_percent = linear(buffer[0x0E], 1, 0),
-        .current_out = iOut,
-        .voltage_out = vOut,
-        .voltage_in = vIn,
-        .power_out = wOut,
-        .power_in = wIn,
-        .energy_out = power_current_kwh_out,
-        .energy_in = power_current_kwh_in,
-        .temperature = linear(buffer[0x0F], 1, 0),
-        .battery_state = linear(buffer[0x08], 0.392, 0),
-        .battery_voltage = linear(buffer[0x0B], 0.0671, 0),
-        .frequency = linear(buffer[0x18], -0.1152, 65)};
-
+        .power_out_percent = pPct,
+        .current_out       = iOut,
+        .voltage_out       = vOut,
+        .voltage_in        = vIn,
+        .power_out         = wOut,
+        .power_in          = wIn,
+        .energy_out        = power_current_kwh_out,
+        .energy_in         = power_current_kwh_in,
+        .temperature       = temp,
+        .battery_state     = cBat,
+        .battery_voltage   = vBat,
+        .frequency         = freq,
+    };
     return metrics;
+}
+
+// Decodifica os bytes de status/flags do buffer de resposta.
+void parse_status_flags(const uint8_t *buf, ups_status_t *s)
+{
+    uint8_t fail = buf[0x13];   // reg 0x008D — falhas
+    uint8_t inp  = buf[0x14];   // reg 0x008E — entrada
+    uint8_t op   = buf[0x15];   // reg 0x008F — operacional
+    uint8_t bat  = buf[0x17];   // reg 0x0091 — bateria/timers
+    uint8_t ctrl = buf[0x1B];   // reg 0x0095 — controle
+
+    s->fail_overtemp      = (fail >> 0) & 1;
+    s->fail_internal      = (fail >> 1) & 1;
+    s->fail_overload      = (fail >> 3) & 1;
+    s->fail_abnormal_vout = (fail >> 5) & 1;
+    s->fail_abnormal_vbat = (fail >> 6) & 1;
+    s->fail_inverter      = (fail >> 7) & 1;
+
+#if defined(CONFIG_UPS_FAMILY_SENIUM)
+    s->fail_end_battery   = (fail >> 2) & 1;
+    s->fail_shortcircuit  = (fail >> 4) & 1;
+#else   // INFINIUM
+    s->fail_shortcircuit  = (fail >> 2) & 1;
+    s->fail_end_battery   = (fail >> 4) & 1;
+#endif
+
+    s->lo_f_input    = (inp >> 0) & 1;
+    s->hi_f_input    = (inp >> 1) & 1;
+    s->no_sync_input = (inp >> 2) & 1;
+    s->lo_v_input    = (inp >> 3) & 1;
+    s->hi_v_input    = (inp >> 4) & 1;
+    s->no_v_input    = (inp >> 5) & 1;
+    s->lo_battery    = (inp >> 6) & 1;
+    s->noise_input   = (inp >> 7) & 1;
+
+    s->op_battery  = (op >> 3) & 1;
+    s->op_stand_by = (op >> 4) & 1;
+    s->op_warning  = (op >> 5) & 1;
+    s->op_startup  = (op >> 6) & 1;
+    s->op_checkup  = (op >> 7) & 1;
+
+    s->sync_input            = (bat >> 0) & 1;
+    s->max_battery           = (bat >> 1) & 1;
+    s->shutdown_timer_active = (bat >> 4) & 1;
+
+    s->remote_control_active = (ctrl >> 3) & 1;
+    s->vin_sel_220v          = (ctrl >> 5) & 1;
 }
 
 // Callback para processar dados recebidos e montar o payload
@@ -139,12 +271,19 @@ bool handle_rx(const uint8_t *data, size_t data_len, void *arg)
         // Verifica se recebeu dados suficientes
         if (xBufferIndex >= UPS_MIN_PACKET_SIZE)
         {
+            // Salva buffer raw para diagnóstico via /api/raw
+            size_t copy_len = xBufferIndex < UPS_RAW_BUF_SIZE ? xBufferIndex : UPS_RAW_BUF_SIZE;
+            memcpy(g_ups_raw_buf, xBuffer, copy_len);
+            g_ups_raw_len = copy_len;
+
             char json_payload[512];
             ups_metricts_t metrics = build_payload(xBuffer, json_payload, sizeof(json_payload));
-            publish_metrics(&metrics);
+            parse_status_flags(xBuffer, (ups_status_t *)&g_ups_status);
             g_ups_metrics = metrics;
+            publish_metrics(&metrics);
+            publish_status((const ups_status_t *)&g_ups_status);
             ESP_LOGI(TAG, "Payload: %s", json_payload);
-            xBufferIndex = 0; // Reset buffer for next use
+            xBufferIndex = 0;
         }
     }
     else

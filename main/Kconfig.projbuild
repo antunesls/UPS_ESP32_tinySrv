@@ -72,9 +72,13 @@ menu "UPS ESP32 TinySrv Configuration"
 
         config BROKER_URL
             string "Broker URL"
-            default "mqtt://mqtt.eclipseprojects.io"
+            default "mqtt://test.mosquitto.org"
             help
-                URL of the broker to connect to
+                URL of the broker to connect to.
+                Examples:
+                  mqtt://192.168.1.10        (broker local, porta 1883)
+                  mqtt://test.mosquitto.org  (broker público de teste)
+                  mqtts://broker.emqx.io    (broker com TLS)
 
         config BROKER_PORT
             int "Broker Port"
@@ -116,6 +120,41 @@ menu "UPS ESP32 TinySrv Configuration"
             default 0x0000
             help
                 USB Product ID of the UPS device
+
+        choice UPS_FAMILY
+            prompt "UPS hardware family"
+            default UPS_FAMILY_INFINIUM
+            help
+                Seleciona a família do hardware UPS Ragtech.
+                INFINIUM DIGITAL (Easy Pro 2200+, Infinity):
+                  iOutput x0.1152, temperatura no reg buf[0x0F].
+                SENIUM (Easy Pro 1000-1600 VA):
+                  iOutput x0.0510, temperatura no reg buf[0x0F].
+
+            config UPS_FAMILY_INFINIUM
+                bool "INFINIUM DIGITAL (Easy Pro 2200+, Infinity)"
+            config UPS_FAMILY_SENIUM
+                bool "SENIUM (Easy Pro 1000-1600 VA)"
+        endchoice
+
+        config UPS_VA_RATING
+            int "Potência nominal do UPS (VA)"
+            default 1200
+            range 300 10000
+            help
+                Capacidade nominal do nobreak em VA (volt-ampere).
+                Exemplo: 1200 para um modelo de 1200 VA.
+                Usado para calcular a porcentagem de carga real.
+
+        config UPS_POWER_FACTOR
+            int "Fator de potência x100 (ex: 70 = 0.70)"
+            default 70
+            range 50 100
+            help
+                Fator de potência do nobreak multiplicado por 100.
+                Exemplo: 70 representa 0.70 (tipico para Ragtech INFINIUM).
+                Potência real = VA × (fator/100).
+                Usado para calcular a porcentagem de carga real.
 
     endmenu
 

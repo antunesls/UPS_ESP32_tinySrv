@@ -34,6 +34,7 @@ This project is base on the need to monitoring the UPS Ragtech Easy Pro 1200VA (
 #include "wifi.h"
 #include "wifi_manager.h"
 #include "ups_mqtt.h"
+#include "log_buffer.h"
 #include "ups.h"
 #include "led_status.h"
 #include "web_server.h"
@@ -43,6 +44,7 @@ static const char *TAG = "UPS-Srv";
 // Aplicação principal
 void app_main(void)
 {
+    log_buffer_init();   // deve ser o primeiro — captura todos os logs subsequentes
     led_status_init();
     led_status_set(LED_STATE_BOOTING);
 

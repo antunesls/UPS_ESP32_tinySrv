@@ -131,5 +131,6 @@ extern esp_mqtt_client_handle_t client;
 // Declarações de funções
 void mqtt_app_start(void);
 void publish_metrics(const ups_metricts_t *metrics);
+void publish_status(const ups_status_t *s);
 
 #endif // MQTT_MANAGER_H

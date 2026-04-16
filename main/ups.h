@@ -30,9 +30,52 @@ typedef struct
     float frequency;
 } ups_metricts_t;
 
-// Métricas globais acessíveis pelo servidor web
+// Status/flags lidos dos registradores 0x008D–0x0095
+typedef struct {
+    // reg 0x008D — Falhas de hardware
+    bool fail_overtemp;
+    bool fail_internal;
+    bool fail_shortcircuit;      // bit2 INF / bit4 SEN
+    bool fail_overload;
+    bool fail_end_battery;       // bit4 INF / bit2 SEN
+    bool fail_abnormal_vout;
+    bool fail_abnormal_vbat;
+    bool fail_inverter;
+    // reg 0x008E — Status da rede
+    bool lo_f_input;
+    bool hi_f_input;
+    bool no_sync_input;
+    bool lo_v_input;
+    bool hi_v_input;
+    bool no_v_input;
+    bool lo_battery;
+    bool noise_input;
+    // reg 0x008F — Status operacional
+    bool op_battery;
+    bool op_stand_by;
+    bool op_warning;
+    bool op_startup;
+    bool op_checkup;
+    // reg 0x0091 — Timers / bateria
+    bool sync_input;
+    bool max_battery;
+    bool shutdown_timer_active;
+    // reg 0x0095 — Controle remoto / tensão nominal
+    bool remote_control_active;
+    bool vin_sel_220v;
+} ups_status_t;
+
+// Métricas e status globais acessíveis pelo servidor web
 extern volatile ups_metricts_t g_ups_metrics;
-extern volatile bool g_ups_connected;
+extern volatile ups_status_t   g_ups_status;
+extern volatile bool           g_ups_connected;
+
+// Último buffer raw recebido do UPS (para diagnóstico via /api/raw)
+#define UPS_RAW_BUF_SIZE 64
+extern uint8_t  g_ups_raw_buf[UPS_RAW_BUF_SIZE];
+extern size_t   g_ups_raw_len;
+
+void parse_status_flags(const uint8_t *buf, ups_status_t *s);
 
 // Funções declaradas no arquivo .c
 
