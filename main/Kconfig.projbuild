@@ -1,0 +1,177 @@
+menu "UPS ESP32 TinySrv Configuration"
+
+    menu "WiFi Configuration"
+        
+        config ESP_WIFI_SSID
+            string "WiFi SSID"
+            default "myssid"
+            help
+                SSID (network name) for the example to connect to.
+
+        config ESP_WIFI_PASSWORD
+            string "WiFi Password"
+            default "mypassword"
+            help
+                WiFi password (WPA or WPA2) for the example to use.
+
+        config ESP_MAXIMUM_RETRY
+            int "Maximum retry"
+            default 5
+            help
+                Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
+
+        choice ESP_WIFI_SCAN_AUTH_MODE_THRESHOLD
+            prompt "WiFi Scan auth mode threshold"
+            default ESP_WIFI_AUTH_WPA2_PSK
+            help
+                The weakest authmode to accept in the scan mode.
+                This value defaults to ESP_WIFI_AUTH_WPA2_PSK incase password is present and ESP_WIFI_AUTH_OPEN is used.
+                Please select ESP_WIFI_AUTH_WEP/ESP_WIFI_AUTH_WPA_PSK incase AP is operating in WEP/WPA mode.
+
+            config ESP_WIFI_AUTH_OPEN
+                bool "OPEN"
+            config ESP_WIFI_AUTH_WEP
+                bool "WEP"
+            config ESP_WIFI_AUTH_WPA_PSK
+                bool "WPA PSK"
+            config ESP_WIFI_AUTH_WPA2_PSK
+                bool "WPA2 PSK"
+            config ESP_WIFI_AUTH_WPA_WPA2_PSK
+                bool "WPA/WPA2 PSK"
+            config ESP_WIFI_AUTH_WPA3_PSK
+                bool "WPA3 PSK"
+            config ESP_WIFI_AUTH_WPA2_WPA3_PSK
+                bool "WPA2/WPA3 PSK"
+            config ESP_WIFI_AUTH_WAPI_PSK
+                bool "WAPI PSK"
+        endchoice
+
+        choice ESP_WIFI_SAE_MODE
+            prompt "WPA3 SAE mode selection"
+            default ESP_WPA3_SAE_PWE_BOTH
+            help
+                Select mode for SAE as Hunt and Peck, H2E or both.
+            config ESP_WPA3_SAE_PWE_HUNT_AND_PECK
+                bool "HUNT AND PECK"
+            config ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT
+                bool "H2E"
+            config ESP_WPA3_SAE_PWE_BOTH
+                bool "BOTH"
+        endchoice
+
+        config ESP_WIFI_PW_ID
+            string "PASSWORD IDENTIFIER"
+            depends on  ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT|| ESP_WPA3_SAE_PWE_BOTH
+            default ""
+            help
+                password identifier for SAE H2E
+
+    endmenu
+
+    menu "MQTT Configuration"
+
+        config BROKER_URL
+            string "Broker URL"
+            default "mqtt://test.mosquitto.org"
+            help
+                URL of the broker to connect to.
+                Examples:
+                  mqtt://192.168.1.10        (broker local, porta 1883)
+                  mqtt://test.mosquitto.org  (broker público de teste)
+                  mqtts://broker.emqx.io    (broker com TLS)
+
+        config BROKER_PORT
+            int "Broker Port"
+            default 1883
+            help
+                Port of the broker to connect to
+
+        config BROKER_USERNAME
+            string "Broker Username"
+            default ""
+            help
+                Username for broker authentication (leave empty if not required)
+
+        config BROKER_PASSWORD
+            string "Broker Password"
+            default ""
+            help
+                Password for broker authentication (leave empty if not required)
+
+    endmenu
+
+    menu "UPS Configuration"
+
+        config UPS_POLL_INTERVAL_MS
+            int "UPS Polling Interval (ms)"
+            default 5000
+            range 1000 60000
+            help
+                Interval in milliseconds to poll UPS for metrics
+
+        config UPS_VENDOR_ID
+            hex "UPS USB Vendor ID"
+            default 0x0001
+            help
+                USB Vendor ID of the UPS device
+
+        config UPS_PRODUCT_ID
+            hex "UPS USB Product ID"
+            default 0x0000
+            help
+                USB Product ID of the UPS device
+
+        config UPS_VA_RATING
+            int "Potência nominal do UPS (VA)"
+            default 1200
+            range 300 10000
+            help
+                Capacidade nominal do nobreak em VA (volt-ampere).
+                Exemplo: 1200 para um modelo de 1200 VA.
+                Usado para calcular a porcentagem de carga real.
+
+        config UPS_POWER_FACTOR
+            int "Fator de potência x100 (ex: 70 = 0.70)"
+            default 70
+            range 50 100
+            help
+                Fator de potência do nobreak multiplicado por 100.
+                Exemplo: 70 representa 0.70 (tipico para Ragtech INFINIUM).
+                Potência real = VA × (fator/100).
+                Usado para calcular a porcentagem de carga real.
+
+        config UPS_IOUT_CALIB
+            int "Calibração de corrente de saída (V_IOUTCALIB, reg 0x00F3)"
+            default 16
+            range 1 255
+            help
+                Valor de calibração de corrente lido do registrador 0x00F3 do nobreak.
+                Fórmula: iOut = V_IOUTPUT × 6.37 / UPS_IOUT_CALIB.
+                Para Easy Pro 1200 TI (modelo 6): use 16 (calculado: 8×6.37/3.24A ≈ 15.7).
+                Ajuste se a corrente lida divergir do valor real medido.
+
+    endmenu
+
+    menu "LED Configuration"
+
+        config LED_GPIO
+            int "LED GPIO pin"
+            default 48
+            help
+                GPIO number of the onboard WS2812 RGB LED.
+                On most ESP32-S3 DevKit boards this is GPIO 48.
+
+    endmenu
+
+    menu "Web Server Configuration"
+
+        config WEB_SERVER_PORT
+            int "HTTP server port"
+            default 80
+            range 1 65535
+            help
+                Port number for the embedded HTTP web server.
+
+    endmenu
+
+endmenu

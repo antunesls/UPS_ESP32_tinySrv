@@ -1,0 +1,22 @@
+#Git Ignore
+
+#Other Files
+*.lock
+sdkconfig.old
+
+# Workspace
+*.code-workspace
+
+#Folders
+build/
+.vscode/
+.devcontainer/
+managed_components/
+dependencies.lock
+
+#env — arquivos com credenciais e configuração local (nunca commitar)
+sdkconfig
+sdkconfig.old
+sdkconfig.defaults
+sdkconfig.example
+update_readme.py

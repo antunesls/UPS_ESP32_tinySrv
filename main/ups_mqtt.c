@@ -1,0 +1,445 @@
+#include "ups_mqtt.h"
+#include "ups.h"
+#include "wifi.h"
+#include "led_status.h"
+
+static const char *TAG = "UPS-MQTT";
+
+esp_mqtt_client_handle_t client;
+
+// Forward declaration
+static void setup_mqtt(void);
+
+// Publica cada flag de status como "ON" ou "OFF" em tópico dedicado
+void publish_status(const ups_status_t *s)
+{
+    if (client == NULL || s == NULL) return;
+
+    char topic[128], topicbase[80];
+    uint8_t mac[6];
+    char macAddr[13];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    snprintf(macAddr, sizeof(macAddr), "%02X%02X%02X%02X%02X%02X",
+             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    snprintf(topicbase, sizeof(topicbase), "UPS_ESP32_tinySrv/%s/status", macAddr);
+
+#define PUB_FLAG(name, val) \
+    do { \
+        snprintf(topic, sizeof(topic), "%s/" name, topicbase); \
+        esp_mqtt_client_publish(client, topic, (val) ? "ON" : "OFF", 0, 1, 0); \
+    } while (0)
+
+    PUB_FLAG("op_battery",            s->op_battery);
+    PUB_FLAG("op_checkup",            s->op_checkup);
+    PUB_FLAG("no_v_input",            s->no_v_input);
+    PUB_FLAG("lo_v_input",            s->lo_v_input);
+    PUB_FLAG("hi_v_input",            s->hi_v_input);
+    PUB_FLAG("hi_p_output",           s->hi_p_output);
+    PUB_FLAG("lo_battery",            s->lo_battery);
+    PUB_FLAG("no_battery",            s->no_battery);
+    PUB_FLAG("old_battery",           s->old_battery);
+    PUB_FLAG("more_battery",          s->more_battery);
+    PUB_FLAG("less_battery",          s->less_battery);
+    PUB_FLAG("sync_input",            s->sync_input);
+    PUB_FLAG("remote_control_active", s->remote_control_active);
+    PUB_FLAG("fail_overtemp",         s->fail_overtemp);
+    PUB_FLAG("fail_overload",         s->fail_overload);
+    PUB_FLAG("fail_shortcircuit",     s->fail_shortcircuit);
+    PUB_FLAG("fail_end_battery",      s->fail_end_battery);
+    PUB_FLAG("fail_abnormal_vout",    s->fail_abnormal_vout);
+    PUB_FLAG("fail_abnormal_vbat",    s->fail_abnormal_vbat);
+    PUB_FLAG("fail_inverter",         s->fail_inverter);
+
+#undef PUB_FLAG
+}
+
+// Função para publicar os dados via MQTT em tópicos separados
+void publish_metrics(const ups_metricts_t *metrics)
+{
+    if (client == NULL || metrics == NULL)
+    {
+        ESP_LOGE("MQTT", "Client or metrics is NULL");
+        return;
+    }
+
+    // Publicar cada métrica em seu próprio tópico
+    char topic[128];
+    char topicbase[64];
+    char payload[32];
+
+    uint8_t mac[6];
+    char macAddr[13];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    snprintf(macAddr, sizeof(macAddr),
+             "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    snprintf(topicbase, sizeof(topicbase), "UPS_ESP32_tinySrv/%s", macAddr);
+
+    snprintf(topic, sizeof(topic), "%s/availability", topicbase);
+    esp_mqtt_client_publish(client, topic, "{\"state\":\"online\"}", 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_power_out_percent", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->power_out_percent);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_current_out", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->current_out);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_voltage_out", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->voltage_out);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_voltage_in", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->voltage_in);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_power_out", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->power_out);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_power_in", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->power_in);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_energy_out", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->energy_out);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_energy_in", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->energy_in);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_temperature", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->temperature);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_battery_state", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->battery_state);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_battery_voltage", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->battery_voltage);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+
+    snprintf(topic, sizeof(topic), "%s/Sensor_frequency", topicbase);
+    snprintf(payload, sizeof(payload), "{\"value\":%.2f}", metrics->frequency);
+    esp_mqtt_client_publish(client, topic, payload, 0, 1, 1);
+}
+
+static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
+{
+    //  ESP_LOGD(TAG, "Event dispatched from event loop base=%s, event_id=%d", base, event_id);
+    esp_mqtt_event_handle_t event = event_data;
+
+    // int msg_id;
+    switch ((esp_mqtt_event_id_t)event_id)
+    {
+    case MQTT_EVENT_CONNECTED:
+        ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
+        led_status_set(LED_STATE_UPS_DISCONNECTED);
+        {
+            static bool setup_done = false;
+            if (!setup_done)
+            {
+                setup_done = true;
+                setup_mqtt();
+            }
+        }
+        break;
+    case MQTT_EVENT_DISCONNECTED:
+        ESP_LOGI(TAG, "MQTT_EVENT_DISCONNECTED");
+        break;
+    case MQTT_EVENT_UNSUBSCRIBED:
+        ESP_LOGI(TAG, "MQTT_EVENT_UNSUBSCRIBED, msg_id=%d", event->msg_id);
+        break;
+    case MQTT_EVENT_PUBLISHED:
+        ESP_LOGI(TAG, "MQTT_EVENT_PUBLISHED, msg_id=%d", event->msg_id);
+        break;
+    case MQTT_EVENT_DATA:
+        ESP_LOGI(TAG, "MQTT_EVENT_DATA");
+        break;
+    case MQTT_EVENT_ERROR:
+        ESP_LOGI(TAG, "MQTT_EVENT_ERROR");
+        break;
+    default:
+        ESP_LOGI(TAG, "Other event id:%d", event->event_id);
+        break;
+    }
+}
+
+void generateJSON_mqtt_setup(SensorData *sensor, char *output, size_t max_length)
+{
+
+    ESP_LOGI(TAG, "Gerando o JSON MQTT");
+
+    printf("availability_mode: '%s'\n", sensor->availability_mode);
+
+    snprintf(output, max_length,
+             "{\n"
+             "  \"availability\": [\n"
+             "    {\"topic\": \"%s\", \"value_template\": \"%s\"}\n"
+             "  ],\n"
+             "  \"availability_mode\": \"%s\",\n"
+             "  \"device\": {\n"
+             "    \"identifiers\": [\"%s\"],\n"
+             "    \"manufacturer\": \"%s\",\n"
+             "    \"model\": \"%s\",\n"
+             "    \"name\": \"%s\",\n"
+             "    \"via_device\": \"%s\"\n"
+             "  },\n"
+             "  \"device_class\": \"%s\",\n"
+             "  \"enabled_by_default\": %s,\n"
+             "  \"object_id\": \"%s\",\n"
+             "  \"origin\": {\n"
+             "    \"name\": \"%s\",\n"
+             "    \"sw\": \"%s\",\n"
+             "    \"url\": \"%s\"\n"
+             "  },\n"
+             "  \"name\": \"%s\",\n"
+             "  \"state_class\": \"%s\",\n"
+             "  \"state_topic\": \"%s\",\n"
+             "  \"unique_id\": \"%s\",\n"
+             "  \"unit_of_measurement\": \"%s\",\n"
+             "  \"value_template\": \"%s\"\n"
+             "}",
+             sensor->availability[0].topic, sensor->availability[0].value_template,
+             sensor->availability_mode,
+             sensor->device.identifiers[0], sensor->device.manufacturer, sensor->device.model,
+             sensor->device.name, sensor->device.via_device,
+             sensor->device_class,
+             sensor->enabled_by_default ? "true" : "false",
+             sensor->object_id,
+             sensor->origin.name, sensor->origin.sw, sensor->origin.url,
+             sensor->name,
+             sensor->state_class, sensor->state_topic, sensor->unique_id,
+             sensor->unit_of_measurement, sensor->value_template);
+}
+
+void SensorSetup(SensorData *sensor, TypeInfo *type_sensor, char *macaddress)
+{
+    char aux[64];
+
+    ESP_LOGI(TAG, "Preenchendo o Struct do Sensor");
+
+    // Fill availability
+    sensor->availability_count = 1;
+
+    snprintf(aux, sizeof(aux), TOPIC_0, macaddress);
+    strcpy(sensor->availability[0].topic, aux);
+
+    strcpy(sensor->availability[0].value_template, VALUE_TEMPLATE_0);
+
+    // Set availability mode
+    strcpy(sensor->availability_mode, AVAILABILITY_MODE);
+
+    // Fill device information
+    snprintf(aux, sizeof(aux), IDENTIFIER_0, macaddress);
+    strcpy(sensor->device.identifiers[0], aux);
+
+    strcpy(sensor->device.manufacturer, MANUFACTURER);
+    strcpy(sensor->device.model, MODEL);
+
+    snprintf(aux, sizeof(aux), NAME, macaddress);
+    strcpy(sensor->device.name, aux);
+
+    snprintf(aux, sizeof(aux), VIA_DEVICE, macaddress);
+    strcpy(sensor->device.via_device, aux);
+
+    // Set device class
+    snprintf(aux, sizeof(aux), DEVICE_CLASS, type_sensor->device);
+    strcpy(sensor->device_class, aux);
+
+    // Set enabled_by_default
+    sensor->enabled_by_default = true;
+
+    // Set object_id
+    snprintf(aux, sizeof(aux), OBJECT_ID, type_sensor->type);
+    strcpy(sensor->object_id, aux);
+
+    // Name
+    strcpy(sensor->name, type_sensor->name);
+
+    // Fill origin information
+    strcpy(sensor->origin.name, ORIGIN_NAME);
+    strcpy(sensor->origin.sw, ORIGIN_SW);
+    strcpy(sensor->origin.url, ORIGIN_URL);
+
+    // Set state_class
+    strcpy(sensor->state_class, STATE_CLASS);
+
+    // Set state_topic
+    snprintf(aux, sizeof(aux), STATE_TOPIC, macaddress, type_sensor->type);
+    strcpy(sensor->state_topic, aux);
+
+    // Set unique_id
+    snprintf(aux, sizeof(aux), UNIQUE_ID, macaddress, type_sensor->type);
+    strcpy(sensor->unique_id, aux);
+
+    // Set unit_of_measurement
+    snprintf(aux, sizeof(aux), UNIT_OF_MEASUREMENT, type_sensor->unit);
+    strcpy(sensor->unit_of_measurement, aux);
+
+    // Set value_template
+    snprintf(aux, sizeof(aux), VALUE_TEMPLATE, "value");
+    strcpy(sensor->value_template, aux);
+}
+
+static void setup_binary_sensors(const char *macaddress)
+{
+    static char topic[128];
+    static char json[640];
+
+    static const struct {
+        const char *type;
+        const char *name;
+        const char *dclass;
+    } sensors[] = {
+        {"op_battery",            "Na Bateria",           "battery_charging"},
+        {"no_v_input",            "Sem Rede",             "plug"},
+        {"lo_v_input",            "Tensao Entrada Baixa", "problem"},
+        {"hi_v_input",            "Tensao Entrada Alta",  "problem"},
+        {"lo_battery",            "Bateria Baixa",        "battery"},
+        {"max_battery",           "Bateria Carregada",    "battery_charging"},
+        {"op_stand_by",           "Modo Stand-by",        "problem"},
+        {"op_warning",            "Aviso Geral",          "problem"},
+        {"shutdown_timer_active", "Timer Desligamento",   "problem"},
+        {"remote_control_active", "Controle Remoto",      "connectivity"},
+        {"fail_overtemp",         "Sobretemperatura",     "heat"},
+        {"fail_overload",         "Sobrecarga",           "problem"},
+        {"fail_inverter",         "Falha Inversor",       "problem"},
+        {"fail_end_battery",      "Bateria Esgotada",     "problem"},
+        {"fail_shortcircuit",     "Curto-Circuito",       "problem"},
+    };
+
+    const size_t n = sizeof(sensors) / sizeof(sensors[0]);
+
+    char avail_topic[96];
+    snprintf(avail_topic, sizeof(avail_topic),
+             "UPS_ESP32_tinySrv/%s/availability", macaddress);
+
+    for (size_t i = 0; i < n; i++) {
+        snprintf(topic, sizeof(topic),
+            "homeassistant/binary_sensor/%s/%s/config",
+            macaddress, sensors[i].type);
+
+        snprintf(json, sizeof(json),
+            "{"
+            "\"name\":\"%s\","
+            "\"device_class\":\"%s\","
+            "\"state_topic\":\"UPS_ESP32_tinySrv/%s/status/%s\","
+            "\"payload_on\":\"ON\","
+            "\"payload_off\":\"OFF\","
+            "\"unique_id\":\"%s_%s_ups_bin\","
+            "\"availability\":[{\"topic\":\"%s\","
+              "\"value_template\":\"{{value_json.state}}\"}],"
+            "\"device\":{"
+              "\"identifiers\":[\"UPS_ESP32_tinySrv_%s\"],"
+              "\"name\":\"UPS_ESP32_tinySrv_%s\","
+              "\"manufacturer\":\"Lucas Souza\","
+              "\"model\":\"UPS_ESP32_tinySrv\"}"
+            "}",
+            sensors[i].name, sensors[i].dclass,
+            macaddress, sensors[i].type,
+            macaddress, sensors[i].type,
+            avail_topic,
+            macaddress, macaddress);
+
+        esp_mqtt_client_publish(client, topic, json, 0, 1, 1);
+    }
+}
+
+static void setup_mqtt(void)
+{
+    ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
+
+    static char topic[64];
+    static char json_mqtt[2048];
+
+    // Get MAC address and display as 6-byte hex value
+    ESP_LOGI(TAG, "Obtem Mac Address");
+    uint8_t mac[6];
+    char macAddr[13];
+    esp_wifi_get_mac(WIFI_IF_STA, mac);
+    snprintf(macAddr, sizeof(macAddr),
+             "%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+
+    ESP_LOGI(TAG, "MAC address: %s", macAddr);
+
+    ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
+
+    // Create an array of TypeInfo
+    static TypeInfo typeInfoArray[] = {
+        {TYPE_POWER_OUT_PERCENT, "%", DEVICE_POWER_OUT_PERCENT, NAME_POWER_OUT_PERCENT},
+        {TYPE_CURRENT_OUT, "A", DEVICE_CURRENT_OUT, NAME_CURRENT_OUT},
+        {TYPE_VOLTAGE_OUT, "V", DEVICE_VOLTAGE_OUT, NAME_VOLTAGE_OUT},
+        {TYPE_VOLTAGE_IN, "V", DEVICE_VOLTAGE_IN, NAME_VOLTAGE_IN},
+        {TYPE_POWER_OUT, "W", DEVICE_POWER_OUT, NAME_POWER_OUT},
+        {TYPE_POWER_IN, "W", DEVICE_POWER_IN, NAME_POWER_IN},
+        {TYPE_TEMPERATURE, "°C", DEVICE_TEMPERATURE, NAME_TEMPERATURE},
+        {TYPE_BATTERY_STATE, "%", DEVICE_BATTERY_STATE, NAME_BATTERY_STATE},
+        {TYPE_BATTERY_VOLTAGE, "V", DEVICE_BATTERY_VOLTAGE, NAME_BATTERY_VOLTAGE},
+        {TYPE_FREQUENCY, "Hz", DEVICE_FREQUENCY, NAME_FREQUENCY}};
+
+    ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
+
+    // Size of the array
+    const size_t typeInfoArraySize = sizeof(typeInfoArray) / sizeof(typeInfoArray[0]);
+    ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
+    ESP_LOGI(TAG, "Gera Base do MQTT");
+
+    static SensorData sensor;
+    static TypeInfo arrayInfoDevice;
+
+    // Iterando pelo array com um for
+    for (int i = 0; i < typeInfoArraySize; i++)
+    {
+
+        arrayInfoDevice = typeInfoArray[i];
+
+        ESP_LOGI(TAG, "Topico Inicial");
+        snprintf(topic, sizeof(topic), "%s%s/%s/%s", TOPIC_SETUP, macAddr, arrayInfoDevice.type, TOPIC_CONFIG);
+
+        ESP_LOGI(TAG, "Topico : %s", topic);
+
+        ESP_LOGI(TAG, "Setup Sensor");
+
+        ESP_LOGI(TAG, "Memoria Livre: %lu ", esp_get_free_heap_size());
+
+        // Populate the structure using the function
+        SensorSetup(&sensor, &arrayInfoDevice, macAddr);
+
+        ESP_LOGI(TAG, "Gera JSON");
+        // Gera o JSON a partir da estrutura preenchida
+        generateJSON_mqtt_setup(&sensor, json_mqtt, sizeof(json_mqtt));
+
+        // Exibe o JSON gerado
+        printf("JSON Gerado:\n%s\n", json_mqtt);
+
+        esp_mqtt_client_publish(client, topic, json_mqtt, 0, 1, 1);
+    }
+
+    // Publica discovery para binary_sensors de status/alarmes
+    setup_binary_sensors(macAddr);
+}
+
+void mqtt_app_start(void)
+{
+    esp_mqtt_client_config_t mqtt_cfg = {
+        .broker.address.uri  = URI_BROKER,
+        .broker.address.port = CONFIG_BROKER_PORT,
+    };
+
+    // Credenciais opcionais (somente se configuradas)
+    if (strlen(CONFIG_BROKER_USERNAME) > 0) {
+        mqtt_cfg.credentials.username = CONFIG_BROKER_USERNAME;
+    }
+    if (strlen(CONFIG_BROKER_PASSWORD) > 0) {
+        mqtt_cfg.credentials.authentication.password = CONFIG_BROKER_PASSWORD;
+    }
+
+    client = esp_mqtt_client_init(&mqtt_cfg);
+    /* The last argument may be used to pass data to the event handler, in this example mqtt_event_handler */
+    esp_mqtt_client_register_event(client, ESP_EVENT_ANY_ID, mqtt_event_handler, NULL);
+    esp_mqtt_client_start(client);
+}

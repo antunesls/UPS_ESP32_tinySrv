@@ -1,0 +1,90 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  build:
+    name: Build firmware (ESP32-S3)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.3
+          target: esp32s3
+
+      - name: Configure sdkconfig
+        run: |
+          # Usa sdkconfig.example como base caso sdkconfig não esteja commitado
+          if [ ! -f sdkconfig ]; then
+            cp sdkconfig.example sdkconfig
+          fi
+
+      - name: Build
+        run: idf.py build
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          # Firmware principal (app only — para OTA)
+          cp build/UPS_ESP32_tinySrv.bin release/UPS_ESP32_tinySrv-${{ github.ref_name }}.bin
+          # Imagem completa para primeiro flash (bootloader + partitions + app)
+          python3 $IDF_PATH/components/esptool_py/esptool/esptool.py \
+            --chip esp32s3 merge_bin \
+            --flash_mode dio \
+            --flash_size 8MB \
+            -o release/UPS_ESP32_tinySrv-${{ github.ref_name }}-full.bin \
+            0x0000  build/bootloader/bootloader.bin \
+            0x8000  build/partition_table/partition-table.bin \
+            0xe000  build/ota_data_initial.bin \
+            0x10000 build/UPS_ESP32_tinySrv.bin
+
+      - name: Generate SHA256 checksums
+        working-directory: release
+        run: sha256sum *.bin > SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "UPS ESP32 tinySrv ${{ github.ref_name }}"
+          body: |
+            ## UPS ESP32-S3 Server — ${{ github.ref_name }}
+
+            ### Arquivos desta release
+
+            | Arquivo | Uso |
+            |---|---|
+            | `...-full.bin` | **Primeiro flash** — inclui bootloader, partition table e firmware |
+            | `....bin` | **OTA** — apenas o firmware (upload pelo painel web ou mqtt) |
+            | `SHA256SUMS.txt` | Checksums para verificação |
+
+            ### Como gravar (primeiro flash)
+
+            ```bash
+            esptool.py --chip esp32s3 --port /dev/ttyUSB0 --baud 460800 \
+              write_flash 0x0 UPS_ESP32_tinySrv-${{ github.ref_name }}-full.bin
+            ```
+
+            ### Como atualizar via OTA
+
+            Acesse `http://<IP do ESP32>` → card **Atualizar Firmware** → envie o arquivo `...bin` (sem `-full`).
+
+            ---
+            Veja o [README](https://github.com/${{ github.repository }}/blob/main/README.md) para instruções completas.
+          files: |
+            release/UPS_ESP32_tinySrv-${{ github.ref_name }}.bin
+            release/UPS_ESP32_tinySrv-${{ github.ref_name }}-full.bin
+            release/SHA256SUMS.txt
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
