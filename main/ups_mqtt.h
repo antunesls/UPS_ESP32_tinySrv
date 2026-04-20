@@ -43,7 +43,7 @@ typedef struct
 #define TYPE_BATTERY_VOLTAGE "battery_voltage"
 #define TYPE_FREQUENCY "frequency"
 
-#define DEVICE_POWER_OUT_PERCENT "power"
+#define DEVICE_POWER_OUT_PERCENT "power_factor"
 #define DEVICE_CURRENT_OUT "current"
 #define DEVICE_VOLTAGE_OUT "voltage"
 #define DEVICE_VOLTAGE_IN "voltage"
