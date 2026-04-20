@@ -147,4 +147,4 @@ Projeto mantido e desenvolvido por [@antunesls](https://github.com/antunesls).
 
 *Referências notáveis para a decodificação do protocolo:*
 - [@RafaelEstevamReis/HA_Ragtech_UPS](https://github.com/RafaelEstevamReis/HA_Ragtech_UPS)
-- Engenharia reversa no utilitário local da Ragtech `devices.xml`.
+
