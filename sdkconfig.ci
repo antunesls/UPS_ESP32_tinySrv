@@ -1,0 +1,11 @@
+# Configuração usada pelo CI para gerar os binários públicos.
+# NÃO coloque credenciais aqui: o broker e o login são definidos
+# por cada usuário no card "Configuração" da página web.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_BROKER_URL="mqtt://homeassistant.local"
+CONFIG_BROKER_PORT=1883
+CONFIG_BROKER_USERNAME=""
+CONFIG_BROKER_PASSWORD=""

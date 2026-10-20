@@ -2,8 +2,13 @@ name: Build & Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -16,21 +21,23 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup ESP-IDF
+      # O ESP-IDF só existe dentro do container desta action, então build e
+      # merge da imagem completa rodam no mesmo comando.
+      # sdkconfig.ci não contém credenciais (broker/login são definidos pela página web).
+      - name: Build (ESP-IDF)
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5.3
           target: esp32s3
-
-      - name: Configure sdkconfig
-        run: |
-          # Usa sdkconfig.example como base caso sdkconfig não esteja commitado
-          if [ ! -f sdkconfig ]; then
-            cp sdkconfig.example sdkconfig
-          fi
-
-      - name: Build
-        run: idf.py build
+          command: |
+            idf.py -DSDKCONFIG_DEFAULTS=sdkconfig.ci build && \
+            esptool.py --chip esp32s3 merge_bin \
+              --flash_mode dio --flash_size 8MB \
+              -o build/UPS_ESP32_tinySrv-full.bin \
+              0x0000  build/bootloader/bootloader.bin \
+              0x8000  build/partition_table/partition-table.bin \
+              0xe000  build/ota_data_initial.bin \
+              0x10000 build/UPS_ESP32_tinySrv.bin
 
       - name: Prepare release assets
         run: |
@@ -38,21 +45,20 @@ jobs:
           # Firmware principal (app only — para OTA)
           cp build/UPS_ESP32_tinySrv.bin release/UPS_ESP32_tinySrv-${{ github.ref_name }}.bin
           # Imagem completa para primeiro flash (bootloader + partitions + app)
-          python3 $IDF_PATH/components/esptool_py/esptool/esptool.py \
-            --chip esp32s3 merge_bin \
-            --flash_mode dio \
-            --flash_size 8MB \
-            -o release/UPS_ESP32_tinySrv-${{ github.ref_name }}-full.bin \
-            0x0000  build/bootloader/bootloader.bin \
-            0x8000  build/partition_table/partition-table.bin \
-            0xe000  build/ota_data_initial.bin \
-            0x10000 build/UPS_ESP32_tinySrv.bin
+          cp build/UPS_ESP32_tinySrv-full.bin release/UPS_ESP32_tinySrv-${{ github.ref_name }}-full.bin
 
       - name: Generate SHA256 checksums
         working-directory: release
         run: sha256sum *.bin > SHA256SUMS.txt
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.ref_name }}
+          path: release/
+
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: "UPS ESP32 tinySrv ${{ github.ref_name }}"
@@ -64,7 +70,7 @@ jobs:
             | Arquivo | Uso |
             |---|---|
             | `...-full.bin` | **Primeiro flash** — inclui bootloader, partition table e firmware |
-            | `....bin` | **OTA** — apenas o firmware (upload pelo painel web ou mqtt) |
+            | `....bin` | **OTA** — apenas o firmware (upload pelo painel web) |
             | `SHA256SUMS.txt` | Checksums para verificação |
 
             ### Como gravar (primeiro flash)
@@ -77,6 +83,11 @@ jobs:
             ### Como atualizar via OTA
 
             Acesse `http://<IP do ESP32>` → card **Atualizar Firmware** → envie o arquivo `...bin` (sem `-full`).
+
+            ### Configuração do MQTT
+
+            Os binários não trazem credenciais: o broker padrão é `mqtt://homeassistant.local`, sem usuário/senha.
+            Ajuste URL, porta, usuário e senha no card **Configuração** da página web — os valores ficam salvos no dispositivo e são mantidos em atualizações OTA.
 
             ---
             Veja o [README](https://github.com/${{ github.repository }}/blob/main/README.md) para instruções completas.
