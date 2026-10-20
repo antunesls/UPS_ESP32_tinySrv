@@ -2,6 +2,7 @@
 #include "ups.h"
 #include "wifi.h"
 #include "led_status.h"
+#include "app_config.h"
 
 static const char *TAG = "UPS-MQTT";
 
@@ -425,17 +426,19 @@ static void setup_mqtt(void)
 
 void mqtt_app_start(void)
 {
+    // Broker e credenciais vêm da configuração do app (página web / NVS)
+    const app_config_t *cfg = app_config_get();
     esp_mqtt_client_config_t mqtt_cfg = {
-        .broker.address.uri  = URI_BROKER,
-        .broker.address.port = CONFIG_BROKER_PORT,
+        .broker.address.uri  = cfg->mqtt_url,
+        .broker.address.port = cfg->mqtt_port,
     };
 
     // Credenciais opcionais (somente se configuradas)
-    if (strlen(CONFIG_BROKER_USERNAME) > 0) {
-        mqtt_cfg.credentials.username = CONFIG_BROKER_USERNAME;
+    if (cfg->mqtt_user[0] != '\0') {
+        mqtt_cfg.credentials.username = cfg->mqtt_user;
     }
-    if (strlen(CONFIG_BROKER_PASSWORD) > 0) {
-        mqtt_cfg.credentials.authentication.password = CONFIG_BROKER_PASSWORD;
+    if (cfg->mqtt_pass[0] != '\0') {
+        mqtt_cfg.credentials.authentication.password = cfg->mqtt_pass;
     }
 
     client = esp_mqtt_client_init(&mqtt_cfg);

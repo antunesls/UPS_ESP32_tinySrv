@@ -1,16 +1,9 @@
 #include "ups.h"
 #include "ups_mqtt.h"
 #include "led_status.h"
+#include "app_config.h"
 #include "nvs_flash.h"
 #include "nvs.h"
-
-// Fallback para quando o sdkconfig ainda não gerou os símbolos (análise de IDE)
-#ifndef CONFIG_UPS_IOUT_CALIB
-#define CONFIG_UPS_IOUT_CALIB   16
-#endif
-#ifndef CONFIG_UPS_POLL_INTERVAL_MS
-#define CONFIG_UPS_POLL_INTERVAL_MS 5000
-#endif
 
 //====
 
@@ -231,7 +224,7 @@ ups_metricts_t build_payload(char *output_json, size_t output_size)
     const ups_model_t *mdl = current_model();
 
     // V_IOUTCALIB vem do range 0x00F3; o Kconfig só é usado se esse range falhar
-    float calib = s_range_ok[1] ? (float)REG(V_IOUTCALIB) : (float)CONFIG_UPS_IOUT_CALIB;
+    float calib = s_range_ok[1] ? (float)REG(V_IOUTCALIB) : (float)app_config_get()->iout_calib;
 
     float cBat = REG(V_CBATTERY) * 0.3930f;                              // cBattery
     float vBat = REG(V_VBATTERY) * (mdl->bat24 ? 0.1340f : 0.0670f);     // vBattery
@@ -651,7 +644,7 @@ void ups_start(void *arg)
             if (proto == 0 && !ups_detect(cdc_dev, &hdr, &proto)) {
                 ESP_LOGW(TAG, "Nobreak não respondeu à detecção de protocolo");
                 proto = 0;
-                vTaskDelay(pdMS_TO_TICKS(CONFIG_UPS_POLL_INTERVAL_MS));
+                vTaskDelay(pdMS_TO_TICKS(app_config_get()->poll_interval_ms));
                 continue;
             }
             if (proto != 0 && hdr != g_ups_info.header) {
@@ -666,7 +659,7 @@ void ups_start(void *arg)
                 proto = 0;
             }
 
-            vTaskDelay(pdMS_TO_TICKS(CONFIG_UPS_POLL_INTERVAL_MS));
+            vTaskDelay(pdMS_TO_TICKS(app_config_get()->poll_interval_ms));
         }
 
         // Espera pela desconexão

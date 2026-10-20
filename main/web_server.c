@@ -3,8 +3,10 @@
 #include "ups.h"
 #include "led_status.h"
 #include "log_buffer.h"
+#include "app_config.h"
 
 #include <string.h>
+#include <stdlib.h>
 #include "esp_log.h"
 #include "esp_http_server.h"
 #include "esp_ota_ops.h"
@@ -207,6 +209,151 @@ static esp_err_t handler_raw(httpd_req_t *req)
     return ESP_OK;
 }
 
+// ── GET/POST /api/config ─────────────────────────────────────────────────────
+
+// Copia 'src' para 'dst' escapando aspas, barras e controles para uso em JSON.
+static void json_escape(char *dst, size_t dst_len, const char *src)
+{
+    size_t j = 0;
+    for (size_t i = 0; src[i] && j + 7 < dst_len; i++) {
+        unsigned char c = (unsigned char)src[i];
+        if (c == '"' || c == '\\') {
+            dst[j++] = '\\';
+            dst[j++] = (char)c;
+        } else if (c < 0x20) {
+            j += snprintf(dst + j, dst_len - j, "\\u%04x", c);
+        } else {
+            dst[j++] = (char)c;
+        }
+    }
+    dst[j] = '\0';
+}
+
+// Decodifica %XX e '+' (application/x-www-form-urlencoded).
+static void url_decode(char *dst, size_t dst_len, const char *src, size_t src_len)
+{
+    size_t j = 0;
+    for (size_t i = 0; i < src_len && j + 1 < dst_len; i++) {
+        if (src[i] == '%' && i + 2 < src_len) {
+            char hex[3] = {src[i + 1], src[i + 2], '\0'};
+            dst[j++] = (char)strtol(hex, NULL, 16);
+            i += 2;
+        } else if (src[i] == '+') {
+            dst[j++] = ' ';
+        } else {
+            dst[j++] = src[i];
+        }
+    }
+    dst[j] = '\0';
+}
+
+// Extrai o campo 'key' de um corpo "a=1&b=2". Retorna false se ausente.
+static bool form_field(const char *body, const char *key, char *out, size_t out_len)
+{
+    size_t klen = strlen(key);
+    const char *p = body;
+    while (p && *p) {
+        if (strncmp(p, key, klen) == 0 && p[klen] == '=') {
+            const char *v = p + klen + 1;
+            const char *end = strchr(v, '&');
+            url_decode(out, out_len, v, end ? (size_t)(end - v) : strlen(v));
+            return true;
+        }
+        p = strchr(p, '&');
+        if (p) p++;
+    }
+    out[0] = '\0';
+    return false;
+}
+
+static esp_err_t handler_config_get(httpd_req_t *req)
+{
+    const app_config_t *cfg = app_config_get();
+    char url[APP_CFG_URL_MAX * 2], user[APP_CFG_USER_MAX * 2];
+    json_escape(url, sizeof(url), cfg->mqtt_url);
+    json_escape(user, sizeof(user), cfg->mqtt_user);
+
+    // A senha nunca é devolvida — só se está definida
+    char buf[512];
+    snprintf(buf, sizeof(buf),
+        "{"
+        "\"mqtt_url\":\"%s\","
+        "\"mqtt_port\":%u,"
+        "\"mqtt_user\":\"%s\","
+        "\"mqtt_pass_set\":%s,"
+        "\"poll_interval_ms\":%lu,"
+        "\"iout_calib\":%u"
+        "}",
+        url, cfg->mqtt_port, user,
+        cfg->mqtt_pass[0] ? "true" : "false",
+        (unsigned long)cfg->poll_interval_ms, cfg->iout_calib);
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+static esp_err_t handler_config_post(httpd_req_t *req)
+{
+    char body[768];
+    int total = req->content_len;
+    if (total <= 0 || total >= (int)sizeof(body)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Corpo inválido");
+        return ESP_FAIL;
+    }
+    int received = 0;
+    while (received < total) {
+        int r = httpd_req_recv(req, body + received, total - received);
+        if (r == HTTPD_SOCK_ERR_TIMEOUT) continue;
+        if (r <= 0) {
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Erro de leitura");
+            return ESP_FAIL;
+        }
+        received += r;
+    }
+    body[received] = '\0';
+
+    app_config_t cfg = *app_config_get();
+    char num[16];
+
+    form_field(body, "mqtt_url", cfg.mqtt_url, sizeof(cfg.mqtt_url));
+    form_field(body, "mqtt_user", cfg.mqtt_user, sizeof(cfg.mqtt_user));
+    if (form_field(body, "mqtt_port", num, sizeof(num)))
+        cfg.mqtt_port = (uint16_t)strtoul(num, NULL, 10);
+    if (form_field(body, "poll_interval_ms", num, sizeof(num)))
+        cfg.poll_interval_ms = (uint32_t)strtoul(num, NULL, 10);
+    if (form_field(body, "iout_calib", num, sizeof(num))) {
+        unsigned long v = strtoul(num, NULL, 10);
+        cfg.iout_calib = v > 255 ? 0 : (uint8_t)v;
+    }
+
+    // Senha: vazio mantém a atual; "mqtt_pass_clear=1" remove
+    char pass[APP_CFG_PASS_MAX];
+    if (form_field(body, "mqtt_pass", pass, sizeof(pass)) && pass[0] != '\0')
+        strlcpy(cfg.mqtt_pass, pass, sizeof(cfg.mqtt_pass));
+    if (form_field(body, "mqtt_pass_clear", num, sizeof(num)) && strcmp(num, "1") == 0)
+        cfg.mqtt_pass[0] = '\0';
+
+    esp_err_t err = app_config_save(&cfg);
+    if (err == ESP_ERR_INVALID_ARG) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+            "Valores inválidos: URL deve começar com mqtt://, mqtts://, ws:// ou wss://; "
+            "porta 1-65535; intervalo 1000-60000 ms; calibração 1-255");
+        return ESP_FAIL;
+    }
+    if (err != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Falha ao gravar no NVS");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_sendstr(req, "OK");
+    ESP_LOGI(TAG, "Configuração alterada pela web. Reiniciando para aplicar...");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return ESP_OK;
+}
+
 // ── POST /ota ─────────────────────────────────────────────────────────────────
 
 static esp_err_t handler_ota(httpd_req_t *req)
@@ -293,6 +440,7 @@ void web_server_start(void)
     config.server_port = CONFIG_WEB_SERVER_PORT;
     config.max_open_sockets = 4;
     config.stack_size = 8192;
+    config.max_uri_handlers = 12;
 
     if (httpd_start(&s_server, &config) != ESP_OK) {
         ESP_LOGE(TAG, "Falha ao iniciar servidor HTTP");
@@ -317,6 +465,12 @@ void web_server_start(void)
     static const httpd_uri_t uri_raw = {
         .uri = "/api/raw", .method = HTTP_GET, .handler = handler_raw
     };
+    static const httpd_uri_t uri_config_get = {
+        .uri = "/api/config", .method = HTTP_GET, .handler = handler_config_get
+    };
+    static const httpd_uri_t uri_config_post = {
+        .uri = "/api/config", .method = HTTP_POST, .handler = handler_config_post
+    };
     static const httpd_uri_t uri_ota = {
         .uri = "/ota", .method = HTTP_POST, .handler = handler_ota
     };
@@ -327,6 +481,8 @@ void web_server_start(void)
     httpd_register_uri_handler(s_server, &uri_info);
     httpd_register_uri_handler(s_server, &uri_logs);
     httpd_register_uri_handler(s_server, &uri_raw);
+    httpd_register_uri_handler(s_server, &uri_config_get);
+    httpd_register_uri_handler(s_server, &uri_config_post);
     httpd_register_uri_handler(s_server, &uri_ota);
 
     ESP_LOGI(TAG, "Servidor iniciado na porta %d", CONFIG_WEB_SERVER_PORT);

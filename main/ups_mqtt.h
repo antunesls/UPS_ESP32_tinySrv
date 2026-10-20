@@ -13,8 +13,6 @@
 #define MAX_STRING_LENGTH 64
 #define MAX_AVAILABILITY 1
 
-#define URI_BROKER CONFIG_BROKER_URL
-
 // Define topic to setup mqtt discovery
 
 #define TOPIC_SETUP "homeassistant/sensor/"
