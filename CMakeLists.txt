@@ -11,6 +11,6 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 idf_build_set_property(MINIMAL_BUILD ON)
 
 # Versão do firmware — atualizar a cada release
-set(PROJECT_VER "2.0.0")
+set(PROJECT_VER "3.1.0")
 
 project(UPS_ESP32_tinySrv)

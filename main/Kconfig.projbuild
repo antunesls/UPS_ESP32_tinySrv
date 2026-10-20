@@ -141,14 +141,13 @@ menu "UPS ESP32 TinySrv Configuration"
                 Usado para calcular a porcentagem de carga real.
 
         config UPS_IOUT_CALIB
-            int "Calibração de corrente de saída (V_IOUTCALIB, reg 0x00F3)"
+            int "Calibração de corrente de saída — fallback (V_IOUTCALIB, reg 0x00F3)"
             default 16
             range 1 255
             help
-                Valor de calibração de corrente lido do registrador 0x00F3 do nobreak.
-                Fórmula: iOut = V_IOUTPUT × 6.37 / UPS_IOUT_CALIB.
-                Para Easy Pro 1200 TI (modelo 6): use 16 (calculado: 8×6.37/3.24A ≈ 15.7).
-                Ajuste se a corrente lida divergir do valor real medido.
+                O firmware lê V_IOUTCALIB diretamente do registrador 0x00F3 do nobreak,
+                como o Supervise. Este valor só é usado se a leitura desse registrador falhar.
+                Fórmula: iOut = V_IOUTPUT × fator_do_modelo / V_IOUTCALIB.
 
     endmenu
 

@@ -65,7 +65,7 @@ static esp_err_t handler_metrics(httpd_req_t *req)
 static esp_err_t handler_status(httpd_req_t *req)
 {
     ups_status_t s = (ups_status_t)g_ups_status;
-    char buf[768];
+    char buf[1024];
     snprintf(buf, sizeof(buf),
         "{"
         "\"op_battery\":%s,"
@@ -80,7 +80,10 @@ static esp_err_t handler_status(httpd_req_t *req)
         "\"more_battery\":%s,"
         "\"less_battery\":%s,"
         "\"sync_input\":%s,"
+        "\"supervise_on\":%s,"
         "\"remote_control_active\":%s,"
+        "\"powerlook_on\":%s,"
+        "\"nightoff_on\":%s,"
         "\"fail_overtemp\":%s,"
         "\"fail_overload\":%s,"
         "\"fail_shortcircuit\":%s,"
@@ -101,7 +104,10 @@ static esp_err_t handler_status(httpd_req_t *req)
         s.more_battery          ? "true" : "false",
         s.less_battery          ? "true" : "false",
         s.sync_input            ? "true" : "false",
+        s.supervise_on          ? "true" : "false",
         s.remote_control_active ? "true" : "false",
+        s.powerlook_on          ? "true" : "false",
+        s.nightoff_on           ? "true" : "false",
         s.fail_overtemp         ? "true" : "false",
         s.fail_overload         ? "true" : "false",
         s.fail_shortcircuit     ? "true" : "false",
@@ -124,18 +130,32 @@ static esp_err_t handler_info(httpd_req_t *req)
 
     uint64_t uptime_s = esp_timer_get_time() / 1000000ULL;
 
-    char buf[256];
+    ups_info_t ups = (ups_info_t)g_ups_info;
+
+    char buf[512];
     snprintf(buf, sizeof(buf),
         "{"
         "\"version\":\"%s\","
         "\"project\":\"%s\","
         "\"partition\":\"%s\","
-        "\"uptime_s\":%llu"
+        "\"uptime_s\":%llu,"
+        "\"ups_model\":%u,"
+        "\"ups_model_name\":\"%s\","
+        "\"ups_nominal_va\":%u,"
+        "\"ups_firmware\":%.1f,"
+        "\"ups_protocol\":%u,"
+        "\"ups_header\":\"0x%02X\""
         "}",
         app->version,
         app->project_name,
         running ? running->label : "unknown",
-        uptime_s);
+        uptime_s,
+        ups.model,
+        ups.model_name ? ups.model_name : "",
+        ups.p_nominal,
+        ups.version,
+        ups.protocol,
+        ups.header);
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");

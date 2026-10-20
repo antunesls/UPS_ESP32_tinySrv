@@ -30,7 +30,7 @@ typedef struct
     float frequency;
 } ups_metricts_t;
 
-// Status/flags — Família 10 (Easy Pro 1200 TI)
+// Status/flags — Família 10 (NEP/TORO/INNERGIE/ONEUP, linha Easy Pro)
 // reg 0x0090, 0x0091, 0x0092 conforme devices.xml família 10
 typedef struct {
     // reg 0x0090 — Status operacional e entrada
@@ -52,15 +52,30 @@ typedef struct {
     bool fail_inverter;          // F_FINVERTER      bit 6
     bool fail_shortcircuit;      // F_FSHORTCIRCUIT  bit 7
     // reg 0x0092 — Flags complementares
-    bool sync_input;             // F_SYNCIN   bit 0
-    bool more_battery;           // F_MOREBAT  bit 2
-    bool less_battery;           // F_LESSBAT  bit 3
-    bool remote_control_active;  // F_RCTRLON  bit 5
+    bool sync_input;             // F_SYNCIN     bit 0
+    bool supervise_on;           // F_SUPERVON   bit 1
+    bool more_battery;           // F_MOREBAT    bit 2
+    bool less_battery;           // F_LESSBAT    bit 3
+    bool remote_control_active;  // F_RCTRLON    bit 5
+    bool powerlook_on;           // F_POWERLOON  bit 6
+    bool nightoff_on;            // F_NIGHTOFFON bit 7
 } ups_status_t;
+
+// Identificação do nobreak detectada no protocolo
+typedef struct {
+    uint8_t     id;          // nibble baixo do cabeçalho (0xA0 | id)
+    uint8_t     header;      // cabeçalho usado nos pedidos
+    uint8_t     protocol;    // 3 = checksum soma, 4 = checksum endereço
+    uint8_t     model;       // V_MODEL (reg 0x009A)
+    const char *model_name;  // nome do modelo (devices.xml família 10)
+    uint16_t    p_nominal;   // C_POUTNOMINAL (VA)
+    float       version;     // V_VERSION × 0.1 (reg 0x009B)
+} ups_info_t;
 
 // Métricas e status globais acessíveis pelo servidor web
 extern volatile ups_metricts_t g_ups_metrics;
 extern volatile ups_status_t   g_ups_status;
+extern volatile ups_info_t     g_ups_info;
 extern volatile bool           g_ups_connected;
 
 // Último buffer raw recebido do UPS (para diagnóstico via /api/raw)
@@ -68,7 +83,11 @@ extern volatile bool           g_ups_connected;
 extern uint8_t  g_ups_raw_buf[UPS_RAW_BUF_SIZE];
 extern size_t   g_ups_raw_len;
 
-void parse_status_flags(const uint8_t *buf, ups_status_t *s);
+/**
+ * Decodifica as flags de status a partir do mapa de registradores lido.
+ * @param s Estrutura de status a preencher.
+ */
+void parse_status_flags(ups_status_t *s);
 
 // Funções declaradas no arquivo .c
 
@@ -92,13 +111,12 @@ float linear(uint8_t val, float a, float b);
 void processPower(float wOut, float wIn, float *power_current_kwh_out, float *power_current_kwh_in, int64_t *power_last_update);
 
 /**
- * Constroi o payload JSON baseado nos dados do buffer.
- * @param buffer Dados recebidos.
+ * Constroi o payload JSON a partir do mapa de registradores lido.
  * @param output_json Ponteiro para a string JSON gerada.
  * @param output_size Tamanho do buffer JSON.
  * @return Estrutura ups_metricts_t contendo os dados.
  */
-ups_metricts_t build_payload(const uint8_t *buffer, char *output_json, size_t output_size);
+ups_metricts_t build_payload(char *output_json, size_t output_size);
 
 /**
  * Callback para processar dados recebidos.
@@ -129,8 +147,9 @@ void handle_event(const cdc_acm_host_dev_event_data_t *event, void *user_ctx);
 void usb_lib_task(void *arg);
 
 /**
- * Inicializa a aplicação UPS.
+ * Inicializa a aplicação UPS (tarefa FreeRTOS).
+ * @param arg Argumento da tarefa (não utilizado).
  */
-void ups_start();
+void ups_start(void *arg);
 
 #endif // UPS_H

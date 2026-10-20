@@ -20,3 +20,6 @@ sdkconfig.old
 sdkconfig.defaults
 sdkconfig.example
 update_readme.py
+Supervise
+# Binários gerados localmente (contêm credenciais do sdkconfig)
+dist/

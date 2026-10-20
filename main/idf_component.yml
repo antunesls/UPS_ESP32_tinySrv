@@ -1,5 +1,14 @@
 ## IDF Component Manager Manifest File
 dependencies:
   usb_host_cdc_acm: "2.*"
+  # No ESP-IDF >= 6.0 o USB Host e o MQTT saíram do core e viraram componentes do gerenciador
+  espressif/usb:
+    version: "*"
+    rules:
+      - if: "idf_version >=6.0"
+  espressif/mqtt:
+    version: "*"
+    rules:
+      - if: "idf_version >=6.0"
   espressif/led_strip: ">=2.0.0"
   idf: ">=5.4"
